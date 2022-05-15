@@ -38,7 +38,7 @@ impl Token<'_> {
     }
 }
 
-pub struct Parser<'a> {
+pub struct Scanner<'a> {
     source: &'a str,
     chars: Peekable<CharIndices<'a>>,
     offset: usize,
@@ -46,7 +46,7 @@ pub struct Parser<'a> {
     column: usize,
 }
 
-impl<'a> Parser<'a> {
+impl<'a> Scanner<'a> {
     pub fn new(source: &'a str) -> Self {
         Self {
             source,
@@ -81,7 +81,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn read_number_literal(&mut self) -> Result<TokenKind, ParseError> {
+    fn read_number_literal(&mut self) -> Result<TokenKind, CompileError> {
         // TODO: Support decimal dot and exponent notation.
         while let Some((_, '0'..='9')) = self.chars.peek() {
             self.read_char();
@@ -89,7 +89,7 @@ impl<'a> Parser<'a> {
         Ok(TokenKind::NumberLiteral)
     }
 
-    fn read_string_literal(&mut self, quote: char) -> Result<TokenKind, ParseError> {
+    fn read_string_literal(&mut self, quote: char) -> Result<TokenKind, CompileError> {
         let line = self.line;
         let column = self.column;
         loop {
@@ -98,7 +98,7 @@ impl<'a> Parser<'a> {
                 Some(c) if c == quote => break,
                 Some(_) => {}
                 None => {
-                    return Err(ParseError {
+                    return Err(CompileError {
                         message: format!("Unclosed string"),
                         line,
                         column,
@@ -109,14 +109,14 @@ impl<'a> Parser<'a> {
         Ok(TokenKind::StringLiteral)
     }
 
-    fn read_identifier(&mut self) -> Result<TokenKind, ParseError> {
+    fn read_identifier(&mut self) -> Result<TokenKind, CompileError> {
         while let Some((_, 'A'..='Z' | 'a'..='z' | '0'..='9')) = self.chars.peek() {
             self.read_char();
         }
         Ok(TokenKind::Identifier)
     }
 
-    pub fn read_token(&mut self) -> Result<Token, ParseError> {
+    pub fn read_token(&mut self) -> Result<Token, CompileError> {
         let c = self.read_char_skip_spaces();
         let start = self.offset;
         let kind = match c {
@@ -137,7 +137,7 @@ impl<'a> Parser<'a> {
             Some(quote @ ('"' | '\'')) => self.read_string_literal(quote)?,
             Some('A'..='Z' | 'a'..='z') => self.read_identifier()?,
             Some(c) => {
-                return Err(ParseError {
+                return Err(CompileError {
                     message: format!("Unknown character '{}'", c),
                     line: self.line,
                     column: self.column,
@@ -151,13 +151,13 @@ impl<'a> Parser<'a> {
 }
 
 #[derive(Debug)]
-pub struct ParseError {
+pub struct CompileError {
     message: String,
     line: usize,
     column: usize,
 }
 
-impl std::fmt::Display for ParseError {
+impl std::fmt::Display for CompileError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}:{}: {}", self.line, self.column, self.message)
     }
