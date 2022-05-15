@@ -169,8 +169,8 @@ impl<'a> Scanner<'a> {
                 })
             }
         };
-        let end = self.offset;
-        let source = &self.source[start..=end];
+        let end = (self.offset + 1).min(self.source.len());
+        let source = &self.source[start..end];
         Ok(Token {
             kind,
             source,
