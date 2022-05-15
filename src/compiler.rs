@@ -102,6 +102,7 @@ impl<'a> Compiler<'a> {
             // TokenKind::Minus => self.negate(),
             TokenKind::NumberLiteral => self.number(),
             // TokenKind::StringLiteral => self.string(),
+            TokenKind::Eof => return Ok(()),
             _ => {
                 return Err(CompileError {
                     message: format!("Unexpected token: \"{}\"", self.token.source()),
