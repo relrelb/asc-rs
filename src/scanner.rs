@@ -1,8 +1,8 @@
 use std::iter::Peekable;
 use std::str::CharIndices;
 
-#[derive(Debug)]
-enum TokenKind {
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum TokenKind {
     // Single-characters.
     LeftParen,
     RightParen,
@@ -33,8 +33,19 @@ pub struct Token<'a> {
 }
 
 impl Token<'_> {
-    pub fn is_eof(&self) -> bool {
-        matches!(self.kind, TokenKind::Eof)
+    pub fn invalid() -> Self {
+        Self {
+            kind: TokenKind::Eof,
+            source: "",
+        }
+    }
+
+    pub fn kind(&self) -> TokenKind {
+        self.kind
+    }
+
+    pub fn source(&self) -> &str {
+        self.source
     }
 }
 
@@ -116,7 +127,7 @@ impl<'a> Scanner<'a> {
         Ok(TokenKind::Identifier)
     }
 
-    pub fn read_token(&mut self) -> Result<Token, CompileError> {
+    pub fn read_token(&mut self) -> Result<Token<'a>, CompileError> {
         let c = self.read_char_skip_spaces();
         let start = self.offset;
         let kind = match c {
@@ -148,13 +159,21 @@ impl<'a> Scanner<'a> {
         let source = &self.source[start..=end];
         Ok(Token { kind, source })
     }
+
+    pub fn line(&self) -> usize {
+        self.line
+    }
+
+    pub fn column(&self) -> usize {
+        self.column
+    }
 }
 
 #[derive(Debug)]
 pub struct CompileError {
-    message: String,
-    line: usize,
-    column: usize,
+    pub message: String,
+    pub line: usize,
+    pub column: usize,
 }
 
 impl std::fmt::Display for CompileError {
