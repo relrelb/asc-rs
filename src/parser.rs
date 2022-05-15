@@ -6,6 +6,7 @@ enum TokenKind {
     LeftParen,
     RightParen,
     Semicolon,
+    NumberLiteral,
     StringLiteral,
     Identifier,
     Eof,
@@ -66,6 +67,14 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn read_number_literal(&mut self) -> Result<TokenKind, ParseError> {
+        // TODO: Support decimal dot and exponent notation.
+        while let Some((_, '0'..='9')) = self.chars.peek() {
+            self.read_char();
+        }
+        Ok(TokenKind::NumberLiteral)
+    }
+
     fn read_string_literal(&mut self, quote: char) -> Result<TokenKind, ParseError> {
         let line = self.line;
         let column = self.column;
@@ -101,6 +110,7 @@ impl<'a> Parser<'a> {
             Some('(') => TokenKind::LeftParen,
             Some(')') => TokenKind::RightParen,
             Some(';') => TokenKind::Semicolon,
+            Some('0'..='9') => self.read_number_literal()?,
             Some(quote @ ('"' | '\'')) => self.read_string_literal(quote)?,
             Some('A'..='Z' | 'a'..='z') => self.read_identifier()?,
             Some(c) => {
