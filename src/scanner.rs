@@ -35,15 +35,6 @@ pub struct Token<'a> {
 }
 
 impl Token<'_> {
-    pub fn invalid() -> Self {
-        Self {
-            kind: TokenKind::Eof,
-            source: "",
-            line: 0,
-            column: 0,
-        }
-    }
-
     pub fn kind(&self) -> TokenKind {
         self.kind
     }
