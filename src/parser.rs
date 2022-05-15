@@ -3,12 +3,26 @@ use std::str::CharIndices;
 
 #[derive(Debug)]
 enum TokenKind {
+    // Single-characters.
     LeftParen,
     RightParen,
+    LeftBrace,
+    RightBrace,
+    Comma,
+    Dot,
+    Minus,
+    Percent,
+    Plus,
     Semicolon,
+    Slash,
+    Star,
+
+    // Literals.
     NumberLiteral,
     StringLiteral,
     Identifier,
+
+    // End-of-file.
     Eof,
 }
 
@@ -109,7 +123,16 @@ impl<'a> Parser<'a> {
             None => TokenKind::Eof,
             Some('(') => TokenKind::LeftParen,
             Some(')') => TokenKind::RightParen,
+            Some('{') => TokenKind::LeftBrace,
+            Some('}') => TokenKind::RightBrace,
+            Some(',') => TokenKind::Comma,
+            Some('.') => TokenKind::Dot,
+            Some('-') => TokenKind::Minus,
+            Some('%') => TokenKind::Percent,
+            Some('+') => TokenKind::Plus,
             Some(';') => TokenKind::Semicolon,
+            Some('/') => TokenKind::Slash,
+            Some('*') => TokenKind::Star,
             Some('0'..='9') => self.read_number_literal()?,
             Some(quote @ ('"' | '\'')) => self.read_string_literal(quote)?,
             Some('A'..='Z' | 'a'..='z') => self.read_identifier()?,
