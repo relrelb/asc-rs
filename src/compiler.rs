@@ -52,16 +52,14 @@ impl<'a> Compiler<'a> {
     }
 
     fn expect(&mut self, kind: TokenKind, message: &str) -> Result<(), CompileError> {
-        let line = self.scanner.line();
-        let column = self.scanner.column();
         let token = self.scanner.read_token()?;
         if token.kind() == kind {
             Ok(())
         } else {
             Err(CompileError {
                 message: message.to_string(),
-                line,
-                column,
+                line: token.line(),
+                column: token.column(),
             })
         }
     }
@@ -98,19 +96,19 @@ impl<'a> Compiler<'a> {
     }
 
     fn compile_with_precedence(&mut self, precedence: Precedence) -> Result<(), CompileError> {
-        let line = self.scanner.line();
-        let column = self.scanner.column();
         self.token = self.scanner.read_token()?;
         match self.token.kind() {
             TokenKind::LeftParen => self.grouping()?,
             // TokenKind::Minus => self.negate(),
             TokenKind::NumberLiteral => self.number(),
             // TokenKind::StringLiteral => self.string(),
-            _ => return Err(CompileError {
-                message: format!("Unexpected token: \"{}\"", self.token.source()),
-                line,
-                column,
-            }),
+            _ => {
+                return Err(CompileError {
+                    message: format!("Unexpected token: \"{}\"", self.token.source()),
+                    line: self.token.line(),
+                    column: self.token.column(),
+                })
+            }
         }
 
         loop {

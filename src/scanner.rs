@@ -30,6 +30,8 @@ pub enum TokenKind {
 pub struct Token<'a> {
     kind: TokenKind,
     source: &'a str,
+    line: usize,
+    column: usize,
 }
 
 impl Token<'_> {
@@ -37,6 +39,8 @@ impl Token<'_> {
         Self {
             kind: TokenKind::Eof,
             source: "",
+            line: 0,
+            column: 0,
         }
     }
 
@@ -46,6 +50,14 @@ impl Token<'_> {
 
     pub fn source(&self) -> &str {
         self.source
+    }
+
+    pub fn line(&self) -> usize {
+        self.line
+    }
+
+    pub fn column(&self) -> usize {
+        self.column
     }
 }
 
@@ -130,6 +142,8 @@ impl<'a> Scanner<'a> {
     pub fn read_token(&mut self) -> Result<Token<'a>, CompileError> {
         let c = self.read_char_skip_spaces();
         let start = self.offset;
+        let line = self.line;
+        let column = self.column - 1;
         let kind = match c {
             None => TokenKind::Eof,
             Some('(') => TokenKind::LeftParen,
@@ -150,22 +164,19 @@ impl<'a> Scanner<'a> {
             Some(c) => {
                 return Err(CompileError {
                     message: format!("Unknown character '{}'", c),
-                    line: self.line,
-                    column: self.column,
+                    line,
+                    column,
                 })
             }
         };
         let end = self.offset;
         let source = &self.source[start..=end];
-        Ok(Token { kind, source })
-    }
-
-    pub fn line(&self) -> usize {
-        self.line
-    }
-
-    pub fn column(&self) -> usize {
-        self.column
+        Ok(Token {
+            kind,
+            source,
+            line,
+            column,
+        })
     }
 }
 
