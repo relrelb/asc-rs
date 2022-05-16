@@ -40,17 +40,25 @@ impl From<TokenKind> for Precedence {
 
 pub struct Compiler<'a> {
     scanner: Scanner<'a>,
+    current: Token<'a>,
 }
 
 impl<'a> Compiler<'a> {
     pub fn new(source: &'a str) -> Self {
         Self {
             scanner: Scanner::new(source),
+            current: Token::INVALID,
         }
     }
 
+    fn read_token(&mut self) -> Result<Token, CompileError> {
+        let next_token = self.scanner.read_token()?;
+        let token = std::mem::replace(&mut self.current, next_token);
+        Ok(token)
+    }
+
     fn expect(&mut self, kind: TokenKind, message: &str) -> Result<(), CompileError> {
-        let token = self.scanner.read_token()?;
+        let token = self.read_token()?;
         if token.kind == kind {
             Ok(())
         } else {
@@ -93,7 +101,9 @@ impl<'a> Compiler<'a> {
     }
 
     fn parse(&mut self, precedence: Precedence) -> Result<(), CompileError> {
-        let token = self.scanner.read_token()?;
+        // TODO: Cannot use `self.read_token()` here because of borrow checker.
+        let next_token = self.scanner.read_token()?;
+        let token = std::mem::replace(&mut self.current, next_token);
         match token.kind {
             TokenKind::LeftParen => self.grouping()?,
             // TokenKind::Minus => self.negate(),
@@ -109,12 +119,10 @@ impl<'a> Compiler<'a> {
             }
         }
 
-        loop {
-            // TODO: Peek token.
-            let token = self.scanner.read_token()?;
-            if precedence > Precedence::from(token.kind) {
-                break;
-            }
+        while Precedence::from(self.current.kind) >= precedence {
+            // TODO: Cannot use `self.read_token()` here because of borrow checker.
+            let next_token = self.scanner.read_token()?;
+            let token = std::mem::replace(&mut self.current, next_token);
             self.infix(token)?;
         }
 
@@ -126,7 +134,11 @@ impl<'a> Compiler<'a> {
     }
 
     pub fn compile(&mut self) -> Result<(), CompileError> {
+        // Initialize `self.current`.
+        self.read_token()?;
+
         self.expression()?;
-        self.expect(TokenKind::Semicolon, "Expected ';' after expression")
+        self.expect(TokenKind::Semicolon, "Expected ';' after expression")?;
+        self.expect(TokenKind::Eof, "Expected EOF")
     }
 }

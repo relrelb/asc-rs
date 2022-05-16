@@ -34,6 +34,15 @@ pub struct Token<'a> {
     pub column: usize,
 }
 
+impl Token<'_> {
+    pub const INVALID: Self = Self {
+        kind: TokenKind::Eof,
+        source: "",
+        line: 0,
+        column: 0,
+    };
+}
+
 pub struct Scanner<'a> {
     source: &'a str,
     chars: Peekable<CharIndices<'a>>,
