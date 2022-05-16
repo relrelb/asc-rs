@@ -63,7 +63,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn grouping(&mut self) -> Result<(), CompileError> {
-        self.compile()?;
+        self.expression()?;
         self.expect(TokenKind::RightParen, "Expected ')' after expression")
     }
 
@@ -79,7 +79,7 @@ impl<'a> Compiler<'a> {
             TokenKind::Slash => Precedence::Primary,
             _ => unreachable!(),
         };
-        self.compile_with_precedence(next_precedence)?;
+        self.parse(next_precedence)?;
 
         match token.kind() {
             TokenKind::Plus => println!("Add"),
@@ -92,7 +92,7 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn compile_with_precedence(&mut self, precedence: Precedence) -> Result<(), CompileError> {
+    fn parse(&mut self, precedence: Precedence) -> Result<(), CompileError> {
         let token = self.scanner.read_token()?;
         match token.kind() {
             TokenKind::LeftParen => self.grouping()?,
@@ -121,7 +121,12 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
+    fn expression(&mut self) -> Result<(), CompileError> {
+        self.parse(Precedence::Assignment)
+    }
+
     pub fn compile(&mut self) -> Result<(), CompileError> {
-        self.compile_with_precedence(Precedence::Assignment)
+        self.expression()?;
+        self.expect(TokenKind::Semicolon, "Expected ';' after expression")
     }
 }
