@@ -75,7 +75,7 @@ impl<'a> Compiler<'a> {
         self.expect(TokenKind::RightParen, "Expected ')' after expression")
     }
 
-    fn number(&mut self, token: Token) {
+    fn literal(&mut self, token: Token) {
         println!("Push {}", token.source);
     }
 
@@ -118,8 +118,8 @@ impl<'a> Compiler<'a> {
         match token.kind {
             TokenKind::LeftParen => self.grouping()?,
             TokenKind::Minus => self.unary(token)?,
-            TokenKind::NumberLiteral => self.number(token),
-            // TokenKind::StringLiteral => self.string(),
+            TokenKind::NumberLiteral => self.literal(token),
+            TokenKind::StringLiteral => self.literal(token),
             TokenKind::Eof => return Ok(()),
             _ => {
                 return Err(CompileError {
