@@ -72,6 +72,9 @@ impl<'a> Scanner<'a> {
     }
 
     fn read_char(&mut self) -> Option<char> {
+        // This will be kept on EOF.
+        self.offset = self.source.len();
+
         let (i, c) = self.chars.next()?;
 
         self.offset = i;
