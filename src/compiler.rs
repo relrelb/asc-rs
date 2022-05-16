@@ -79,6 +79,11 @@ impl<'a> Compiler<'a> {
         println!("Push {}", token.source);
     }
 
+    fn get_variable(&mut self, token: Token) {
+        println!("Push \"{}\"", token.source);
+        println!("GetVariable");
+    }
+
     fn unary(&mut self, token: Token) -> Result<(), CompileError> {
         self.parse(Precedence::Unary)?;
 
@@ -120,6 +125,7 @@ impl<'a> Compiler<'a> {
             TokenKind::Minus => self.unary(token)?,
             TokenKind::NumberLiteral => self.literal(token),
             TokenKind::StringLiteral => self.literal(token),
+            TokenKind::Identifier => self.get_variable(token),
             TokenKind::Eof => return Ok(()),
             _ => {
                 return Err(CompileError {
