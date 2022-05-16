@@ -10,7 +10,7 @@ enum Precedence {
     // Comparison,
     Term,
     Factor,
-    // Unary,
+    Unary,
     // Call,
     Primary,
 }
@@ -79,6 +79,17 @@ impl<'a> Compiler<'a> {
         println!("Push {}", token.source);
     }
 
+    fn unary(&mut self, token: Token) -> Result<(), CompileError> {
+        self.parse(Precedence::Unary)?;
+
+        match token.kind {
+            TokenKind::Minus => println!("Negate"),
+            _ => unreachable!(),
+        }
+
+        Ok(())
+    }
+
     fn infix(&mut self, token: Token) -> Result<(), CompileError> {
         let next_precedence = match token.kind {
             TokenKind::Plus => Precedence::Factor,
@@ -106,7 +117,7 @@ impl<'a> Compiler<'a> {
         let token = std::mem::replace(&mut self.current, next_token);
         match token.kind {
             TokenKind::LeftParen => self.grouping()?,
-            // TokenKind::Minus => self.negate(),
+            TokenKind::Minus => self.unary(token)?,
             TokenKind::NumberLiteral => self.number(token),
             // TokenKind::StringLiteral => self.string(),
             TokenKind::Eof => return Ok(()),
