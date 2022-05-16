@@ -51,13 +51,13 @@ impl<'a> Compiler<'a> {
 
     fn expect(&mut self, kind: TokenKind, message: &str) -> Result<(), CompileError> {
         let token = self.scanner.read_token()?;
-        if token.kind() == kind {
+        if token.kind == kind {
             Ok(())
         } else {
             Err(CompileError {
                 message: message.to_string(),
-                line: token.line(),
-                column: token.column(),
+                line: token.line,
+                column: token.column,
             })
         }
     }
@@ -68,11 +68,11 @@ impl<'a> Compiler<'a> {
     }
 
     fn number(&mut self, token: Token) {
-        println!("Push {}", token.source());
+        println!("Push {}", token.source);
     }
 
     fn infix(&mut self, token: Token) -> Result<(), CompileError> {
-        let next_precedence = match token.kind() {
+        let next_precedence = match token.kind {
             TokenKind::Plus => Precedence::Factor,
             TokenKind::Minus => Precedence::Factor,
             TokenKind::Star => Precedence::Primary,
@@ -81,7 +81,7 @@ impl<'a> Compiler<'a> {
         };
         self.parse(next_precedence)?;
 
-        match token.kind() {
+        match token.kind {
             TokenKind::Plus => println!("Add"),
             TokenKind::Minus => println!("Sub"),
             TokenKind::Star => println!("Mul"),
@@ -94,7 +94,7 @@ impl<'a> Compiler<'a> {
 
     fn parse(&mut self, precedence: Precedence) -> Result<(), CompileError> {
         let token = self.scanner.read_token()?;
-        match token.kind() {
+        match token.kind {
             TokenKind::LeftParen => self.grouping()?,
             // TokenKind::Minus => self.negate(),
             TokenKind::NumberLiteral => self.number(token),
@@ -102,9 +102,9 @@ impl<'a> Compiler<'a> {
             TokenKind::Eof => return Ok(()),
             _ => {
                 return Err(CompileError {
-                    message: format!("Unexpected token: \"{}\"", token.source()),
-                    line: token.line(),
-                    column: token.column(),
+                    message: format!("Unexpected token: \"{}\"", token.source),
+                    line: token.line,
+                    column: token.column,
                 })
             }
         }
@@ -112,7 +112,7 @@ impl<'a> Compiler<'a> {
         loop {
             // TODO: Peek token.
             let token = self.scanner.read_token()?;
-            if precedence > Precedence::from(token.kind()) {
+            if precedence > Precedence::from(token.kind) {
                 break;
             }
             self.infix(token)?;

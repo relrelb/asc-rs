@@ -28,28 +28,10 @@ pub enum TokenKind {
 
 #[derive(Debug)]
 pub struct Token<'a> {
-    kind: TokenKind,
-    source: &'a str,
-    line: usize,
-    column: usize,
-}
-
-impl Token<'_> {
-    pub fn kind(&self) -> TokenKind {
-        self.kind
-    }
-
-    pub fn source(&self) -> &str {
-        self.source
-    }
-
-    pub fn line(&self) -> usize {
-        self.line
-    }
-
-    pub fn column(&self) -> usize {
-        self.column
-    }
+    pub kind: TokenKind,
+    pub source: &'a str,
+    pub line: usize,
+    pub column: usize,
 }
 
 pub struct Scanner<'a> {
