@@ -90,7 +90,7 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn infix(&mut self, token: Token) -> Result<(), CompileError> {
+    fn binary(&mut self, token: Token) -> Result<(), CompileError> {
         let next_precedence = match token.kind {
             TokenKind::Plus => Precedence::Factor,
             TokenKind::Minus => Precedence::Factor,
@@ -134,7 +134,7 @@ impl<'a> Compiler<'a> {
             // TODO: Cannot use `self.read_token()` here because of borrow checker.
             let next_token = self.scanner.read_token()?;
             let token = std::mem::replace(&mut self.current, next_token);
-            self.infix(token)?;
+            self.binary(token)?;
         }
 
         Ok(())
