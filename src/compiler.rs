@@ -57,6 +57,10 @@ impl<'a> Compiler<'a> {
         Ok(token)
     }
 
+    fn peek_token(&self) -> &Token {
+        &self.current
+    }
+
     fn expect(&mut self, kind: TokenKind, message: &str) -> Result<(), CompileError> {
         let token = self.read_token()?;
         if token.kind == kind {
@@ -136,7 +140,7 @@ impl<'a> Compiler<'a> {
             }
         }
 
-        while Precedence::from(self.current.kind) >= precedence {
+        while Precedence::from(self.peek_token().kind) >= precedence {
             // TODO: Cannot use `self.read_token()` here because of borrow checker.
             let next_token = self.scanner.read_token()?;
             let token = std::mem::replace(&mut self.current, next_token);
