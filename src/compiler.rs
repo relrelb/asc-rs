@@ -6,8 +6,8 @@ enum Precedence {
     Assignment,
     // Or,
     // And,
-    // Equality,
-    // Comparison,
+    Equality,
+    Comparison,
     Term,
     Factor,
     Unary,
@@ -30,6 +30,14 @@ impl From<TokenKind> for Precedence {
             TokenKind::Semicolon => Self::None,
             TokenKind::Slash => Self::Factor,
             TokenKind::Star => Self::Factor,
+            TokenKind::Bang => Self::Unary,
+            TokenKind::BangEqual => Self::Equality,
+            TokenKind::Equal => Self::Assignment,
+            TokenKind::EqualEqual => Self::Equality,
+            TokenKind::Greater => Self::Comparison,
+            TokenKind::GreaterEqual => Self::Comparison,
+            TokenKind::Less => Self::Comparison,
+            TokenKind::LessEqual => Self::Comparison,
             TokenKind::NumberLiteral => Self::None,
             TokenKind::StringLiteral => Self::None,
             TokenKind::Identifier => Self::None,
@@ -93,6 +101,7 @@ impl<'a> Compiler<'a> {
 
         match token.kind {
             TokenKind::Minus => println!("Negate"),
+            TokenKind::Bang => println!("Not"),
             _ => unreachable!(),
         }
 
@@ -100,20 +109,33 @@ impl<'a> Compiler<'a> {
     }
 
     fn binary(&mut self, token: Token) -> Result<(), CompileError> {
-        let next_precedence = match token.kind {
-            TokenKind::Plus => Precedence::Factor,
-            TokenKind::Minus => Precedence::Factor,
-            TokenKind::Star => Precedence::Primary,
-            TokenKind::Slash => Precedence::Primary,
-            _ => unreachable!(),
+        let next_precedence = match Precedence::from(token.kind) {
+            Precedence::None | Precedence::Primary => unreachable!(),
+            Precedence::Assignment => Precedence::Equality,
+            Precedence::Equality => Precedence::Comparison,
+            Precedence::Comparison => Precedence::Term,
+            Precedence::Term => Precedence::Factor,
+            Precedence::Factor => Precedence::Unary,
+            Precedence::Unary => Precedence::Primary,
         };
         self.parse(next_precedence)?;
 
         match token.kind {
             TokenKind::Plus => println!("Add"),
             TokenKind::Minus => println!("Sub"),
-            TokenKind::Star => println!("Mul"),
             TokenKind::Slash => println!("Div"),
+            TokenKind::Star => println!("Mul"),
+            TokenKind::EqualEqual => println!("Equals"),
+            TokenKind::Greater => println!("Greater"),
+            TokenKind::GreaterEqual => {
+                println!("Less");
+                println!("Not");
+            }
+            TokenKind::Less => println!("Less"),
+            TokenKind::LessEqual => {
+                println!("Greater");
+                println!("Not");
+            }
             _ => unreachable!(),
         }
 
@@ -127,6 +149,7 @@ impl<'a> Compiler<'a> {
         match token.kind {
             TokenKind::LeftParen => self.grouping()?,
             TokenKind::Minus => self.unary(token)?,
+            TokenKind::Bang => self.unary(token)?,
             TokenKind::NumberLiteral => self.literal(token),
             TokenKind::StringLiteral => self.literal(token),
             TokenKind::Identifier => self.get_variable(token),

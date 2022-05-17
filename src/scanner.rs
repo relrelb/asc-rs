@@ -17,6 +17,16 @@ pub enum TokenKind {
     Slash,
     Star,
 
+    // One or two characters.
+    Bang,
+    BangEqual,
+    Equal,
+    EqualEqual,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
+
     // Literals.
     NumberLiteral,
     StringLiteral,
@@ -135,6 +145,34 @@ impl<'a> Scanner<'a> {
             Some(')') => TokenKind::RightParen,
             Some('{') => TokenKind::LeftBrace,
             Some('}') => TokenKind::RightBrace,
+            Some('!') => match self.chars.peek() {
+                Some((_, '=')) => {
+                    self.read_char();
+                    TokenKind::BangEqual
+                }
+                _ => TokenKind::Bang,
+            },
+            Some('=') => match self.chars.peek() {
+                Some((_, '=')) => {
+                    self.read_char();
+                    TokenKind::EqualEqual
+                }
+                _ => TokenKind::Equal,
+            },
+            Some('>') => match self.chars.peek() {
+                Some((_, '=')) => {
+                    self.read_char();
+                    TokenKind::GreaterEqual
+                }
+                _ => TokenKind::Greater,
+            },
+            Some('<') => match self.chars.peek() {
+                Some((_, '=')) => {
+                    self.read_char();
+                    TokenKind::LessEqual
+                }
+                _ => TokenKind::Less,
+            },
             Some(',') => TokenKind::Comma,
             Some('.') => TokenKind::Dot,
             Some('-') => TokenKind::Minus,
