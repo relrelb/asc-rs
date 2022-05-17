@@ -38,13 +38,13 @@ impl From<TokenKind> for Precedence {
     }
 }
 
-pub struct Compiler<'a> {
+struct Compiler<'a> {
     scanner: Scanner<'a>,
     current: Token<'a>,
 }
 
 impl<'a> Compiler<'a> {
-    pub fn new(source: &'a str) -> Self {
+    fn new(source: &'a str) -> Self {
         Self {
             scanner: Scanner::new(source),
             current: Token::INVALID,
@@ -150,7 +150,7 @@ impl<'a> Compiler<'a> {
         self.parse(Precedence::Assignment)
     }
 
-    pub fn compile(&mut self) -> Result<(), CompileError> {
+    fn compile(&mut self) -> Result<(), CompileError> {
         // Initialize `self.current`.
         self.read_token()?;
 
@@ -158,4 +158,8 @@ impl<'a> Compiler<'a> {
         self.expect(TokenKind::Semicolon, "Expected ';' after expression")?;
         self.expect(TokenKind::Eof, "Expected EOF")
     }
+}
+
+pub fn compile(source: &str) -> Result<(), CompileError> {
+    Compiler::new(source).compile()
 }
