@@ -41,6 +41,7 @@ impl From<TokenKind> for Precedence {
             TokenKind::NumberLiteral => Self::None,
             TokenKind::StringLiteral => Self::None,
             TokenKind::Identifier => Self::None,
+            TokenKind::Trace => Self::None,
             TokenKind::Eof => Self::None,
         }
     }
@@ -69,11 +70,21 @@ impl<'a> Compiler<'a> {
         &self.current
     }
 
-    fn expect(&mut self, kind: TokenKind, message: &str) -> Result<(), CompileError> {
-        let token = self.read_token()?;
+    fn consume(&mut self, kind: TokenKind) -> Result<bool, CompileError> {
+        let token = self.peek_token();
         if token.kind == kind {
+            self.read_token()?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn expect(&mut self, kind: TokenKind, message: &str) -> Result<(), CompileError> {
+        if self.consume(kind)? {
             Ok(())
         } else {
+            let token = self.peek_token();
             Err(CompileError {
                 message: message.to_string(),
                 line: token.line,
@@ -177,13 +188,30 @@ impl<'a> Compiler<'a> {
         self.parse(Precedence::Assignment)
     }
 
+    fn statement(&mut self) -> Result<(), CompileError> {
+        if self.consume(TokenKind::Trace)? {
+            self.expect(TokenKind::LeftParen, "Expected '(' before expression")?;
+            self.expression()?;
+            self.expect(TokenKind::RightParen, "Expected ')' after expression")?;
+            self.expect(TokenKind::Semicolon, "Expected ';'")?;
+            println!("Trace");
+        } else {
+            self.expression()?;
+            self.expect(TokenKind::Semicolon, "Expected ';'")?;
+            println!("Pop");
+        }
+        Ok(())
+    }
+
     fn compile(&mut self) -> Result<(), CompileError> {
         // Initialize `self.current`.
         self.read_token()?;
 
-        self.expression()?;
-        self.expect(TokenKind::Semicolon, "Expected ';' after expression")?;
-        self.expect(TokenKind::Eof, "Expected EOF")
+        while self.peek_token().kind != TokenKind::Eof {
+            self.statement()?;
+        }
+
+        Ok(())
     }
 }
 

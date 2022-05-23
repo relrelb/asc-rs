@@ -32,6 +32,9 @@ pub enum TokenKind {
     StringLiteral,
     Identifier,
 
+    // Keywords.
+    Trace,
+
     // End-of-file.
     Eof,
 }
@@ -128,10 +131,17 @@ impl<'a> Scanner<'a> {
     }
 
     fn read_identifier(&mut self) -> Result<TokenKind, CompileError> {
+        let start = self.offset;
         while let Some((_, 'A'..='Z' | 'a'..='z' | '0'..='9')) = self.chars.peek() {
             self.read_char();
         }
-        Ok(TokenKind::Identifier)
+        let end = (self.offset + 1).min(self.source.len());
+        let source = &self.source[start..end];
+        let kind = match source {
+            "trace" => TokenKind::Trace,
+            _ => TokenKind::Identifier,
+        };
+        Ok(kind)
     }
 
     pub fn read_token(&mut self) -> Result<Token<'a>, CompileError> {
