@@ -34,6 +34,7 @@ pub enum TokenKind {
 
     // Keywords.
     Trace,
+    Var,
 
     // End-of-file.
     Eof,
@@ -139,6 +140,7 @@ impl<'a> Scanner<'a> {
         let source = &self.source[start..end];
         let kind = match source {
             "trace" => TokenKind::Trace,
+            "var" => TokenKind::Var,
             _ => TokenKind::Identifier,
         };
         Ok(kind)

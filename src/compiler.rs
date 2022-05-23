@@ -42,6 +42,7 @@ impl From<TokenKind> for Precedence {
             TokenKind::StringLiteral => Self::None,
             TokenKind::Identifier => Self::None,
             TokenKind::Trace => Self::None,
+            TokenKind::Var => Self::None,
             TokenKind::Eof => Self::None,
         }
     }
@@ -80,11 +81,11 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn expect(&mut self, kind: TokenKind, message: &str) -> Result<(), CompileError> {
-        if self.consume(kind)? {
-            Ok(())
+    fn expect(&mut self, kind: TokenKind, message: &str) -> Result<Token, CompileError> {
+        let token = self.peek_token();
+        if token.kind == kind {
+            self.read_token()
         } else {
-            let token = self.peek_token();
             Err(CompileError {
                 message: message.to_string(),
                 line: token.line,
@@ -95,16 +96,23 @@ impl<'a> Compiler<'a> {
 
     fn grouping(&mut self) -> Result<(), CompileError> {
         self.expression()?;
-        self.expect(TokenKind::RightParen, "Expected ')' after expression")
+        self.expect(TokenKind::RightParen, "Expected ')' after expression")?;
+        Ok(())
     }
 
     fn literal(&mut self, token: Token) {
         println!("Push {}", token.source);
     }
 
-    fn get_variable(&mut self, token: Token) {
+    fn variable(&mut self, can_assign: bool, token: Token) -> Result<(), CompileError> {
         println!("Push \"{}\"", token.source);
-        println!("GetVariable");
+        if can_assign && self.consume(TokenKind::Equal)? {
+            self.expression()?;
+            println!("SetVariable");
+        } else {
+            println!("GetVariable");
+        }
+        Ok(())
     }
 
     fn unary(&mut self, token: Token) -> Result<(), CompileError> {
@@ -154,6 +162,8 @@ impl<'a> Compiler<'a> {
     }
 
     fn parse(&mut self, precedence: Precedence) -> Result<(), CompileError> {
+        let can_assign = precedence <= Precedence::Assignment;
+
         // TODO: Cannot use `self.read_token()` here because of borrow checker.
         let next_token = self.scanner.read_token()?;
         let token = std::mem::replace(&mut self.current, next_token);
@@ -163,7 +173,7 @@ impl<'a> Compiler<'a> {
             TokenKind::Bang => self.unary(token)?,
             TokenKind::NumberLiteral => self.literal(token),
             TokenKind::StringLiteral => self.literal(token),
-            TokenKind::Identifier => self.get_variable(token),
+            TokenKind::Identifier => self.variable(can_assign, token)?,
             TokenKind::Eof => return Ok(()),
             _ => {
                 return Err(CompileError {
@@ -178,6 +188,15 @@ impl<'a> Compiler<'a> {
             // TODO: Cannot use `self.read_token()` here because of borrow checker.
             let next_token = self.scanner.read_token()?;
             let token = std::mem::replace(&mut self.current, next_token);
+
+            if can_assign && token.kind == TokenKind::Equal {
+                return Err(CompileError {
+                    message: "Invalid assignment target".to_string(),
+                    line: token.line,
+                    column: token.column,
+                });
+            }
+
             self.binary(token)?;
         }
 
@@ -195,6 +214,17 @@ impl<'a> Compiler<'a> {
             self.expect(TokenKind::RightParen, "Expected ')' after expression")?;
             self.expect(TokenKind::Semicolon, "Expected ';'")?;
             println!("Trace");
+        } else if self.consume(TokenKind::Var)? {
+            let name = self.expect(TokenKind::Identifier, "Expected variable name")?;
+            // TODO: Cannot use `self.literal()` here because of borrow checker.
+            println!("Push \"{}\"", name.source);
+            if self.consume(TokenKind::Equal)? {
+                self.expression()?;
+            } else {
+                println!("Push undefined");
+            }
+            self.expect(TokenKind::Semicolon, "Expected ';'")?;
+            println!("SetVariable");
         } else {
             self.expression()?;
             self.expect(TokenKind::Semicolon, "Expected ';'")?;
