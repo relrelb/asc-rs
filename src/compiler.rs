@@ -42,6 +42,7 @@ impl From<TokenKind> for Precedence {
             TokenKind::StringLiteral => Self::None,
             TokenKind::Identifier => Self::None,
             TokenKind::Trace => Self::None,
+            TokenKind::Typeof => Self::Unary,
             TokenKind::Var => Self::None,
             TokenKind::Eof => Self::None,
         }
@@ -122,6 +123,7 @@ impl<'a> Compiler<'a> {
             TokenKind::Plus => println!("ToNumber"),
             TokenKind::Minus => println!("Negate"),
             TokenKind::Bang => println!("Not"),
+            TokenKind::Typeof => println!("Typeof"),
             _ => unreachable!(),
         }
 
@@ -170,7 +172,9 @@ impl<'a> Compiler<'a> {
         let token = std::mem::replace(&mut self.current, next_token);
         match token.kind {
             TokenKind::LeftParen => self.grouping()?,
-            TokenKind::Plus | TokenKind::Minus | TokenKind::Bang => self.unary(token)?,
+            TokenKind::Plus | TokenKind::Minus | TokenKind::Bang | TokenKind::Typeof => {
+                self.unary(token)?
+            }
             TokenKind::NumberLiteral => self.literal(token),
             TokenKind::StringLiteral => self.literal(token),
             TokenKind::Identifier => self.variable(can_assign, token)?,
