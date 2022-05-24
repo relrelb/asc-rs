@@ -29,9 +29,13 @@ pub enum TokenKind {
     LessEqual,
 
     // Literals.
-    NumberLiteral,
-    StringLiteral,
+    False,
     Identifier,
+    Null,
+    Number,
+    String,
+    True,
+    Undefined,
 
     // Keywords.
     Trace,
@@ -105,15 +109,15 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn read_number_literal(&mut self) -> Result<TokenKind, CompileError> {
+    fn read_number(&mut self) -> Result<TokenKind, CompileError> {
         // TODO: Support decimal dot and exponent notation.
         while let Some((_, '0'..='9')) = self.chars.peek() {
             self.read_char();
         }
-        Ok(TokenKind::NumberLiteral)
+        Ok(TokenKind::Number)
     }
 
-    fn read_string_literal(&mut self, quote: char) -> Result<TokenKind, CompileError> {
+    fn read_string(&mut self, quote: char) -> Result<TokenKind, CompileError> {
         let line = self.line;
         let column = self.column;
         loop {
@@ -130,7 +134,7 @@ impl<'a> Scanner<'a> {
                 }
             }
         }
-        Ok(TokenKind::StringLiteral)
+        Ok(TokenKind::String)
     }
 
     fn read_identifier(&mut self) -> Result<TokenKind, CompileError> {
@@ -141,8 +145,12 @@ impl<'a> Scanner<'a> {
         let end = (self.offset + 1).min(self.source.len());
         let source = &self.source[start..end];
         let kind = match source {
+            "false" => TokenKind::False,
+            "null" => TokenKind::Null,
             "trace" => TokenKind::Trace,
+            "true" => TokenKind::True,
             "typeof" => TokenKind::Typeof,
+            "undefined" => TokenKind::Undefined,
             "var" => TokenKind::Var,
             _ => TokenKind::Identifier,
         };
@@ -197,8 +205,8 @@ impl<'a> Scanner<'a> {
             Some('/') => TokenKind::Slash,
             Some('*') => TokenKind::Star,
             Some('~') => TokenKind::Tilda,
-            Some('0'..='9') => self.read_number_literal()?,
-            Some(quote @ ('"' | '\'')) => self.read_string_literal(quote)?,
+            Some('0'..='9') => self.read_number()?,
+            Some(quote @ ('"' | '\'')) => self.read_string(quote)?,
             Some('A'..='Z' | 'a'..='z') => self.read_identifier()?,
             Some(c) => {
                 return Err(CompileError {

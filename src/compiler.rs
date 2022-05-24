@@ -39,9 +39,13 @@ impl From<TokenKind> for Precedence {
             TokenKind::GreaterEqual => Self::Comparison,
             TokenKind::Less => Self::Comparison,
             TokenKind::LessEqual => Self::Comparison,
-            TokenKind::NumberLiteral => Self::None,
-            TokenKind::StringLiteral => Self::None,
+            TokenKind::False => Self::None,
             TokenKind::Identifier => Self::None,
+            TokenKind::Null => Self::None,
+            TokenKind::Number => Self::None,
+            TokenKind::String => Self::None,
+            TokenKind::True => Self::None,
+            TokenKind::Undefined => Self::None,
             TokenKind::Trace => Self::None,
             TokenKind::Typeof => Self::Unary,
             TokenKind::Var => Self::None,
@@ -180,8 +184,12 @@ impl<'a> Compiler<'a> {
             | TokenKind::Tilda
             | TokenKind::Bang
             | TokenKind::Typeof => self.unary(token)?,
-            TokenKind::NumberLiteral => self.literal(token),
-            TokenKind::StringLiteral => self.literal(token),
+            TokenKind::Number => self.literal(token),
+            TokenKind::String => self.literal(token),
+            TokenKind::False => println!("Push false"),
+            TokenKind::Null => println!("Push null"),
+            TokenKind::True => println!("Push true"),
+            TokenKind::Undefined => println!("Push undefined"),
             TokenKind::Identifier => self.variable_access(can_assign, token)?,
             TokenKind::Eof => {
                 return Err(CompileError {
