@@ -38,6 +38,7 @@ pub enum TokenKind {
     Undefined,
 
     // Keywords.
+    If,
     Trace,
     Typeof,
     Var,
@@ -145,6 +146,7 @@ impl<'a> Scanner<'a> {
         let end = (self.offset + 1).min(self.source.len());
         let source = &self.source[start..end];
         let kind = match source {
+            "if" => TokenKind::If,
             "false" => TokenKind::False,
             "null" => TokenKind::Null,
             "trace" => TokenKind::Trace,

@@ -39,6 +39,7 @@ impl From<TokenKind> for Precedence {
             TokenKind::GreaterEqual => Self::Comparison,
             TokenKind::Less => Self::Comparison,
             TokenKind::LessEqual => Self::Comparison,
+            TokenKind::If => Self::None,
             TokenKind::False => Self::None,
             TokenKind::Identifier => Self::None,
             TokenKind::Null => Self::None,
@@ -268,22 +269,40 @@ impl<'a> Compiler<'a> {
             self.peek_token().kind,
             TokenKind::RightBrace | TokenKind::Eof
         ) {
-            self.statement()?;
+            self.declaration()?;
         }
 
         self.expect(TokenKind::RightBrace, "Expected '}' after block")?;
         Ok(())
     }
 
+    fn if_statement(&mut self) -> Result<(), CompileError> {
+        self.expect(TokenKind::LeftParen, "Expected '(' after if")?;
+        self.expression()?;
+        self.expect(TokenKind::RightParen, "Expected ')' after condition")?;
+        println!("If");
+        self.statement()?;
+        println!("After If");
+        Ok(())
+    }
+
     fn statement(&mut self) -> Result<(), CompileError> {
         if self.consume(TokenKind::LeftBrace)? {
             self.block_statement()
+        } else if self.consume(TokenKind::If)? {
+            self.if_statement()
         } else if self.consume(TokenKind::Trace)? {
             self.trace_statement()
-        } else if self.consume(TokenKind::Var)? {
-            self.variable_declaration()
         } else {
             self.expression_statement()
+        }
+    }
+
+    fn declaration(&mut self) -> Result<(), CompileError> {
+        if self.consume(TokenKind::Var)? {
+            self.variable_declaration()
+        } else {
+            self.statement()
         }
     }
 
@@ -292,7 +311,7 @@ impl<'a> Compiler<'a> {
         self.read_token()?;
 
         while self.peek_token().kind != TokenKind::Eof {
-            self.statement()?;
+            self.declaration()?;
         }
 
         Ok(())
