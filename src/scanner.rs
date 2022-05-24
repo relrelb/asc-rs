@@ -221,9 +221,3 @@ pub struct CompileError {
     pub line: usize,
     pub column: usize,
 }
-
-impl std::fmt::Display for CompileError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}:{}: {}", self.line, self.column, self.message)
-    }
-}
