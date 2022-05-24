@@ -116,7 +116,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn unary(&mut self, token: Token) -> Result<(), CompileError> {
-        self.parse(Precedence::Unary)?;
+        self.expression_with_precedence(Precedence::Unary)?;
 
         match token.kind {
             TokenKind::Minus => println!("Negate"),
@@ -137,7 +137,7 @@ impl<'a> Compiler<'a> {
             Precedence::Factor => Precedence::Unary,
             Precedence::Unary => Precedence::Primary,
         };
-        self.parse(next_precedence)?;
+        self.expression_with_precedence(next_precedence)?;
 
         match token.kind {
             TokenKind::Plus => println!("Add"),
@@ -161,7 +161,7 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn parse(&mut self, precedence: Precedence) -> Result<(), CompileError> {
+    fn expression_with_precedence(&mut self, precedence: Precedence) -> Result<(), CompileError> {
         let can_assign = precedence <= Precedence::Assignment;
 
         // TODO: Cannot use `self.read_token()` here because of borrow checker.
@@ -213,7 +213,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn expression(&mut self) -> Result<(), CompileError> {
-        self.parse(Precedence::Assignment)
+        self.expression_with_precedence(Precedence::Assignment)
     }
 
     fn statement(&mut self) -> Result<(), CompileError> {
