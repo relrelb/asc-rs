@@ -35,6 +35,7 @@ impl From<TokenKind> for Precedence {
             TokenKind::BangEqual => Self::Equality,
             TokenKind::Equal => Self::None,
             TokenKind::EqualEqual => Self::Equality,
+            TokenKind::EqualEqualEqual => Self::Equality,
             TokenKind::Greater => Self::Comparison,
             TokenKind::GreaterEqual => Self::Comparison,
             TokenKind::Less => Self::Comparison,
@@ -157,6 +158,7 @@ impl<'a> Compiler<'a> {
             TokenKind::Slash => println!("Div"),
             TokenKind::Star => println!("Mul"),
             TokenKind::EqualEqual => println!("Equals"),
+            TokenKind::EqualEqualEqual => println!("StrictEquals"),
             TokenKind::Greater => println!("Greater"),
             TokenKind::GreaterEqual => {
                 println!("Less");

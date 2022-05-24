@@ -18,11 +18,12 @@ pub enum TokenKind {
     Star,
     Tilda,
 
-    // One or two characters.
+    // One or more characters.
     Bang,
     BangEqual,
     Equal,
     EqualEqual,
+    EqualEqualEqual,
     Greater,
     GreaterEqual,
     Less,
@@ -182,7 +183,13 @@ impl<'a> Scanner<'a> {
             Some('=') => match self.chars.peek() {
                 Some((_, '=')) => {
                     self.read_char();
-                    TokenKind::EqualEqual
+                    match self.chars.peek() {
+                        Some((_, '=')) => {
+                            self.read_char();
+                            TokenKind::EqualEqualEqual
+                        }
+                        _ => TokenKind::EqualEqual,
+                    }
                 }
                 _ => TokenKind::Equal,
             },
