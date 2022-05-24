@@ -39,8 +39,9 @@ impl From<TokenKind> for Precedence {
             TokenKind::GreaterEqual => Self::Comparison,
             TokenKind::Less => Self::Comparison,
             TokenKind::LessEqual => Self::Comparison,
-            TokenKind::If => Self::None,
+            TokenKind::Else => Self::None,
             TokenKind::False => Self::None,
+            TokenKind::If => Self::None,
             TokenKind::Identifier => Self::None,
             TokenKind::Null => Self::None,
             TokenKind::Number => Self::None,
@@ -283,6 +284,11 @@ impl<'a> Compiler<'a> {
         println!("If");
         self.statement()?;
         println!("After If");
+        if self.consume(TokenKind::Else)? {
+            println!("Else");
+            self.statement()?;
+            println!("After Else");
+        }
         Ok(())
     }
 
