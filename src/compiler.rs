@@ -30,6 +30,7 @@ impl From<TokenKind> for Precedence {
             TokenKind::Semicolon => Self::None,
             TokenKind::Slash => Self::Factor,
             TokenKind::Star => Self::Factor,
+            TokenKind::Tilda => Self::Unary,
             TokenKind::Bang => Self::Unary,
             TokenKind::BangEqual => Self::Equality,
             TokenKind::Equal => Self::None,
@@ -122,6 +123,7 @@ impl<'a> Compiler<'a> {
         match token.kind {
             TokenKind::Plus => println!("ToNumber"),
             TokenKind::Minus => println!("Negate"),
+            TokenKind::Tilda => println!("BitNot"),
             TokenKind::Bang => println!("Not"),
             TokenKind::Typeof => println!("Typeof"),
             _ => unreachable!(),
@@ -172,9 +174,11 @@ impl<'a> Compiler<'a> {
         let token = std::mem::replace(&mut self.current, next_token);
         match token.kind {
             TokenKind::LeftParen => self.grouping()?,
-            TokenKind::Plus | TokenKind::Minus | TokenKind::Bang | TokenKind::Typeof => {
-                self.unary(token)?
-            }
+            TokenKind::Plus
+            | TokenKind::Minus
+            | TokenKind::Tilda
+            | TokenKind::Bang
+            | TokenKind::Typeof => self.unary(token)?,
             TokenKind::NumberLiteral => self.literal(token),
             TokenKind::StringLiteral => self.literal(token),
             TokenKind::Identifier => self.variable(can_assign, token)?,

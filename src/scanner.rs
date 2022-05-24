@@ -16,6 +16,7 @@ pub enum TokenKind {
     Semicolon,
     Slash,
     Star,
+    Tilda,
 
     // One or two characters.
     Bang,
@@ -195,6 +196,7 @@ impl<'a> Scanner<'a> {
             Some(';') => TokenKind::Semicolon,
             Some('/') => TokenKind::Slash,
             Some('*') => TokenKind::Star,
+            Some('~') => TokenKind::Tilda,
             Some('0'..='9') => self.read_number_literal()?,
             Some(quote @ ('"' | '\'')) => self.read_string_literal(quote)?,
             Some('A'..='Z' | 'a'..='z') => self.read_identifier()?,
