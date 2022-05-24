@@ -119,6 +119,7 @@ impl<'a> Compiler<'a> {
         self.expression_with_precedence(Precedence::Unary)?;
 
         match token.kind {
+            TokenKind::Plus => println!("ToNumber"),
             TokenKind::Minus => println!("Negate"),
             TokenKind::Bang => println!("Not"),
             _ => unreachable!(),
@@ -169,8 +170,7 @@ impl<'a> Compiler<'a> {
         let token = std::mem::replace(&mut self.current, next_token);
         match token.kind {
             TokenKind::LeftParen => self.grouping()?,
-            TokenKind::Minus => self.unary(token)?,
-            TokenKind::Bang => self.unary(token)?,
+            TokenKind::Plus | TokenKind::Minus | TokenKind::Bang => self.unary(token)?,
             TokenKind::NumberLiteral => self.literal(token),
             TokenKind::StringLiteral => self.literal(token),
             TokenKind::Identifier => self.variable(can_assign, token)?,
