@@ -32,7 +32,7 @@ impl From<TokenKind> for Precedence {
             TokenKind::Star => Self::Factor,
             TokenKind::Bang => Self::Unary,
             TokenKind::BangEqual => Self::Equality,
-            TokenKind::Equal => Self::Assignment,
+            TokenKind::Equal => Self::None,
             TokenKind::EqualEqual => Self::Equality,
             TokenKind::Greater => Self::Comparison,
             TokenKind::GreaterEqual => Self::Comparison,
@@ -189,15 +189,18 @@ impl<'a> Compiler<'a> {
             let next_token = self.scanner.read_token()?;
             let token = std::mem::replace(&mut self.current, next_token);
 
-            if can_assign && token.kind == TokenKind::Equal {
+            self.binary(token)?;
+        }
+
+        if can_assign {
+            let token = self.peek_token();
+            if token.kind == TokenKind::Equal {
                 return Err(CompileError {
                     message: "Invalid assignment target".to_string(),
                     line: token.line,
                     column: token.column,
                 });
             }
-
-            self.binary(token)?;
         }
 
         Ok(())
