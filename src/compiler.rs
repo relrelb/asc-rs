@@ -106,7 +106,7 @@ impl<'a> Compiler<'a> {
         println!("Push {}", token.source);
     }
 
-    fn variable(&mut self, can_assign: bool, token: Token) -> Result<(), CompileError> {
+    fn variable_access(&mut self, can_assign: bool, token: Token) -> Result<(), CompileError> {
         println!("Push \"{}\"", token.source);
         if can_assign && self.consume(TokenKind::Equal)? {
             self.expression()?;
@@ -182,7 +182,7 @@ impl<'a> Compiler<'a> {
             | TokenKind::Typeof => self.unary(token)?,
             TokenKind::NumberLiteral => self.literal(token),
             TokenKind::StringLiteral => self.literal(token),
-            TokenKind::Identifier => self.variable(can_assign, token)?,
+            TokenKind::Identifier => self.variable_access(can_assign, token)?,
             TokenKind::Eof => {
                 return Err(CompileError {
                     message: "Unexpected end of file".to_string(),
@@ -225,30 +225,44 @@ impl<'a> Compiler<'a> {
         self.expression_with_precedence(Precedence::Assignment)
     }
 
+    fn trace_statement(&mut self) -> Result<(), CompileError> {
+        self.expect(TokenKind::LeftParen, "Expected '(' before expression")?;
+        self.expression()?;
+        self.expect(TokenKind::RightParen, "Expected ')' after expression")?;
+        self.expect(TokenKind::Semicolon, "Expected ';'")?;
+        println!("Trace");
+        Ok(())
+    }
+
+    fn variable_declaration(&mut self) -> Result<(), CompileError> {
+        let name = self.expect(TokenKind::Identifier, "Expected variable name")?;
+        // TODO: Cannot use `self.literal()` here because of borrow checker.
+        println!("Push \"{}\"", name.source);
+        if self.consume(TokenKind::Equal)? {
+            self.expression()?;
+        } else {
+            println!("Push undefined");
+        }
+        self.expect(TokenKind::Semicolon, "Expected ';'")?;
+        println!("SetVariable");
+        Ok(())
+    }
+
+    fn expression_statement(&mut self) -> Result<(), CompileError> {
+        self.expression()?;
+        self.expect(TokenKind::Semicolon, "Expected ';'")?;
+        println!("Pop");
+        Ok(())
+    }
+
     fn statement(&mut self) -> Result<(), CompileError> {
         if self.consume(TokenKind::Trace)? {
-            self.expect(TokenKind::LeftParen, "Expected '(' before expression")?;
-            self.expression()?;
-            self.expect(TokenKind::RightParen, "Expected ')' after expression")?;
-            self.expect(TokenKind::Semicolon, "Expected ';'")?;
-            println!("Trace");
+            self.trace_statement()
         } else if self.consume(TokenKind::Var)? {
-            let name = self.expect(TokenKind::Identifier, "Expected variable name")?;
-            // TODO: Cannot use `self.literal()` here because of borrow checker.
-            println!("Push \"{}\"", name.source);
-            if self.consume(TokenKind::Equal)? {
-                self.expression()?;
-            } else {
-                println!("Push undefined");
-            }
-            self.expect(TokenKind::Semicolon, "Expected ';'")?;
-            println!("SetVariable");
+            self.variable_declaration()
         } else {
-            self.expression()?;
-            self.expect(TokenKind::Semicolon, "Expected ';'")?;
-            println!("Pop");
+            self.expression_statement()
         }
-        Ok(())
     }
 
     fn compile(&mut self) -> Result<(), CompileError> {
