@@ -145,6 +145,7 @@ impl<'a> Compiler<'a> {
         self.expression_with_precedence(next_precedence)?;
 
         match token.kind {
+            TokenKind::Percent => println!("Mod"),
             TokenKind::Plus => println!("Add"),
             TokenKind::Minus => println!("Sub"),
             TokenKind::Slash => println!("Div"),
