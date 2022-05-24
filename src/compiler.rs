@@ -237,7 +237,7 @@ impl<'a> Compiler<'a> {
         self.expect(TokenKind::LeftParen, "Expected '(' before expression")?;
         self.expression()?;
         self.expect(TokenKind::RightParen, "Expected ')' after expression")?;
-        self.expect(TokenKind::Semicolon, "Expected ';'")?;
+        self.expect(TokenKind::Semicolon, "Expected ';' after statement")?;
         println!("Trace");
         Ok(())
     }
@@ -251,20 +251,34 @@ impl<'a> Compiler<'a> {
         } else {
             println!("Push undefined");
         }
-        self.expect(TokenKind::Semicolon, "Expected ';'")?;
+        self.expect(TokenKind::Semicolon, "Expected ';' after statement")?;
         println!("SetVariable");
         Ok(())
     }
 
     fn expression_statement(&mut self) -> Result<(), CompileError> {
         self.expression()?;
-        self.expect(TokenKind::Semicolon, "Expected ';'")?;
+        self.expect(TokenKind::Semicolon, "Expected ';' after statement")?;
         println!("Pop");
         Ok(())
     }
 
+    fn block_statement(&mut self) -> Result<(), CompileError> {
+        while !matches!(
+            self.peek_token().kind,
+            TokenKind::RightBrace | TokenKind::Eof
+        ) {
+            self.statement()?;
+        }
+
+        self.expect(TokenKind::RightBrace, "Expected '}' after block")?;
+        Ok(())
+    }
+
     fn statement(&mut self) -> Result<(), CompileError> {
-        if self.consume(TokenKind::Trace)? {
+        if self.consume(TokenKind::LeftBrace)? {
+            self.block_statement()
+        } else if self.consume(TokenKind::Trace)? {
             self.trace_statement()
         } else if self.consume(TokenKind::Var)? {
             self.variable_declaration()
