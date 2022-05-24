@@ -174,7 +174,13 @@ impl<'a> Compiler<'a> {
             TokenKind::NumberLiteral => self.literal(token),
             TokenKind::StringLiteral => self.literal(token),
             TokenKind::Identifier => self.variable(can_assign, token)?,
-            TokenKind::Eof => return Ok(()),
+            TokenKind::Eof => {
+                return Err(CompileError {
+                    message: "Unexpected end of file".to_string(),
+                    line: token.line,
+                    column: token.column,
+                })
+            }
             _ => {
                 return Err(CompileError {
                     message: format!("Unexpected token: \"{}\"", token.source),
