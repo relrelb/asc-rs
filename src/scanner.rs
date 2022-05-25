@@ -3,7 +3,7 @@ use std::str::CharIndices;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum TokenKind {
-    // Single-characters.
+    // Operators.
     LeftParen,
     RightParen,
     LeftBrace,
@@ -11,14 +11,14 @@ pub enum TokenKind {
     Comma,
     Dot,
     Minus,
+    MinusMinus,
     Percent,
     Plus,
+    PlusPlus,
     Semicolon,
     Slash,
     Star,
     Tilda,
-
-    // One or more characters.
     Bang,
     BangEqual,
     Equal,
@@ -209,9 +209,21 @@ impl<'a> Scanner<'a> {
             },
             Some(',') => TokenKind::Comma,
             Some('.') => TokenKind::Dot,
-            Some('-') => TokenKind::Minus,
+            Some('-') => match self.chars.peek() {
+                Some((_, '-')) => {
+                    self.read_char();
+                    TokenKind::MinusMinus,
+                }
+                _ => TokenKind::Minus,
+            },
             Some('%') => TokenKind::Percent,
-            Some('+') => TokenKind::Plus,
+            Some('+') => match self.chars.peek() {
+                Some((_, '+')) => {
+                    self.read_char();
+                    TokenKind::PlusPlus,
+                }
+                _ => TokenKind::Plus,
+            },
             Some(';') => TokenKind::Semicolon,
             Some('/') => TokenKind::Slash,
             Some('*') => TokenKind::Star,
