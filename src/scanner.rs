@@ -212,7 +212,7 @@ impl<'a> Scanner<'a> {
             Some('-') => match self.chars.peek() {
                 Some((_, '-')) => {
                     self.read_char();
-                    TokenKind::MinusMinus,
+                    TokenKind::MinusMinus
                 }
                 _ => TokenKind::Minus,
             },
@@ -220,7 +220,7 @@ impl<'a> Scanner<'a> {
             Some('+') => match self.chars.peek() {
                 Some((_, '+')) => {
                     self.read_char();
-                    TokenKind::PlusPlus,
+                    TokenKind::PlusPlus
                 }
                 _ => TokenKind::Plus,
             },

@@ -25,8 +25,10 @@ impl From<TokenKind> for Precedence {
             TokenKind::Comma => Self::None,
             TokenKind::Dot => Self::None,
             TokenKind::Minus => Self::Term,
+            TokenKind::MinusMinus => Self::None,
             TokenKind::Percent => Self::Factor,
             TokenKind::Plus => Self::Term,
+            TokenKind::PlusPlus => Self::None,
             TokenKind::Semicolon => Self::None,
             TokenKind::Slash => Self::Factor,
             TokenKind::Star => Self::Factor,
@@ -188,6 +190,17 @@ impl<'a> Compiler<'a> {
             | TokenKind::Tilda
             | TokenKind::Bang
             | TokenKind::Typeof => self.unary(token)?,
+            TokenKind::PlusPlus | TokenKind::MinusMinus => {
+                let variable = self.expect(TokenKind::Identifier, "Expected variable")?;
+                println!("Push \"{}\"", variable.source);
+                println!("GetVariable");
+                match token.kind {
+                    TokenKind::PlusPlus => println!("Increment"),
+                    TokenKind::MinusMinus => println!("Decrement"),
+                    _ => unreachable!(),
+                }
+                println!("SetVariable");
+            }
             TokenKind::Number => self.literal(token),
             TokenKind::String => self.literal(token),
             TokenKind::False => println!("Push false"),
