@@ -120,6 +120,14 @@ impl<'a> Compiler<'a> {
         if can_assign && self.consume(TokenKind::Equal)? {
             self.expression()?;
             println!("SetVariable");
+        } else if self.consume(TokenKind::PlusPlus)? {
+            println!("GetVariable");
+            println!("Increment");
+            println!("SetVariable");
+        } else if self.consume(TokenKind::MinusMinus)? {
+            println!("GetVariable");
+            println!("Decrement");
+            println!("SetVariable");
         } else {
             println!("GetVariable");
         }
