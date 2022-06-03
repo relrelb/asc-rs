@@ -140,26 +140,13 @@ impl<'a> Scanner<'a> {
         Ok(TokenKind::String)
     }
 
-    fn read_identifier(&mut self) -> Result<TokenKind, CompileError> {
+    fn read_identifier(&mut self) -> &str {
         let start = self.offset;
         while let Some((_, 'A'..='Z' | 'a'..='z' | '0'..='9')) = self.chars.peek() {
             self.read_char();
         }
         let end = (self.offset + 1).min(self.source.len());
-        let source = &self.source[start..end];
-        let kind = match source {
-            "else" => TokenKind::Else,
-            "false" => TokenKind::False,
-            "if" => TokenKind::If,
-            "null" => TokenKind::Null,
-            "trace" => TokenKind::Trace,
-            "true" => TokenKind::True,
-            "typeof" => TokenKind::Typeof,
-            "undefined" => TokenKind::Undefined,
-            "var" => TokenKind::Var,
-            _ => TokenKind::Identifier,
-        };
-        Ok(kind)
+        &self.source[start..end]
     }
 
     pub fn read_token(&mut self) -> Result<Token<'a>, CompileError> {
@@ -230,7 +217,18 @@ impl<'a> Scanner<'a> {
             Some('~') => TokenKind::Tilda,
             Some('0'..='9') => self.read_number()?,
             Some(quote @ ('"' | '\'')) => self.read_string(quote)?,
-            Some('A'..='Z' | 'a'..='z') => self.read_identifier()?,
+            Some('A'..='Z' | 'a'..='z') => match self.read_identifier() {
+                "else" => TokenKind::Else,
+                "false" => TokenKind::False,
+                "if" => TokenKind::If,
+                "null" => TokenKind::Null,
+                "trace" => TokenKind::Trace,
+                "true" => TokenKind::True,
+                "typeof" => TokenKind::Typeof,
+                "undefined" => TokenKind::Undefined,
+                "var" => TokenKind::Var,
+                _ => TokenKind::Identifier,
+            },
             Some(c) => {
                 return Err(CompileError {
                     message: format!("Unknown character '{}'", c),
