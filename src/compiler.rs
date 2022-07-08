@@ -142,6 +142,12 @@ impl<'a> Compiler<'a> {
     }
 
     fn unary(&mut self, token: Token) -> Result<(), CompileError> {
+        match token.kind {
+            TokenKind::Minus => self.push(swf::avm1::types::Value::Int(0)),
+            TokenKind::Tilda => self.push(swf::avm1::types::Value::Double(u32::MAX.into())),
+            _ => {}
+        }
+
         self.expression_with_precedence(Precedence::Unary)?;
 
         match token.kind {
@@ -149,8 +155,14 @@ impl<'a> Compiler<'a> {
                 let action = swf::avm1::types::Action::ToNumber;
                 self.writer.write_action(&action).unwrap();
             }
-            TokenKind::Minus => println!("Negate"),
-            TokenKind::Tilda => println!("BitNot"),
+            TokenKind::Minus => {
+                let action = swf::avm1::types::Action::Subtract;
+                self.writer.write_action(&action).unwrap();
+            }
+            TokenKind::Tilda => {
+                let action = swf::avm1::types::Action::BitXor;
+                self.writer.write_action(&action).unwrap();
+            }
             TokenKind::Bang => {
                 let action = swf::avm1::types::Action::Not;
                 self.writer.write_action(&action).unwrap();
