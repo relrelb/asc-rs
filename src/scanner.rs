@@ -130,7 +130,7 @@ impl<'a> Scanner<'a> {
                 Some(_) => {}
                 None => {
                     return Err(CompileError {
-                        message: format!("Unclosed string"),
+                        message: "Unclosed string".to_string(),
                         line,
                         column,
                     })

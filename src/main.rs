@@ -3,7 +3,7 @@ mod scanner;
 
 fn usage() {
     let program = std::env::args()
-        .nth(0)
+        .next()
         .map_or("asc".into(), std::borrow::Cow::Owned);
     println!("Usage: {} <file.as>", program);
 }
