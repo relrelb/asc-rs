@@ -1,12 +1,10 @@
-use std::borrow::Cow;
-
 mod compiler;
 mod scanner;
 
 fn usage() {
     let program = std::env::args()
         .nth(0)
-        .map_or(Cow::Borrowed("asc"), Cow::Owned);
+        .map_or("asc".into(), std::borrow::Cow::Owned);
     println!("Usage: {} <file.as>", program);
 }
 
@@ -27,7 +25,9 @@ fn main() {
         }
     };
 
-    if let Err(error) = compiler::compile(&source) {
+    let file = std::fs::File::create("test.swf").unwrap();
+    let writer = std::io::BufWriter::new(file);
+    if let Err(error) = compiler::compile(&source, writer) {
         let line = source.lines().nth(error.line - 1).unwrap();
         println!(
             "{}:{}:{}: {}.\n\t{}\n\t{}^",

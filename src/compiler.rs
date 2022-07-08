@@ -62,13 +62,15 @@ impl From<TokenKind> for Precedence {
 struct Compiler<'a> {
     scanner: Scanner<'a>,
     current: Token<'a>,
+    writer: swf::avm1::write::Writer<&'a mut Vec<u8>>,
 }
 
 impl<'a> Compiler<'a> {
-    fn new(source: &'a str) -> Self {
+    fn new(source: &'a str, output: &'a mut Vec<u8>) -> Self {
         Self {
             scanner: Scanner::new(source),
             current: Token::INVALID,
+            writer: swf::avm1::write::Writer::new(output, 0),
         }
     }
 
@@ -111,8 +113,13 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn literal(&mut self, token: Token) {
-        println!("Push {}", token.source);
+    fn push(&mut self, value: swf::avm1::types::Value) {
+        // TODO: Use constant pool.
+        let push = swf::avm1::types::Push {
+            values: vec![value],
+        };
+        let action = swf::avm1::types::Action::Push(push);
+        self.writer.write_action(&action).unwrap();
     }
 
     fn variable_access(&mut self, can_assign: bool, token: Token) -> Result<(), CompileError> {
@@ -138,11 +145,20 @@ impl<'a> Compiler<'a> {
         self.expression_with_precedence(Precedence::Unary)?;
 
         match token.kind {
-            TokenKind::Plus => println!("ToNumber"),
+            TokenKind::Plus => {
+                let action = swf::avm1::types::Action::ToNumber;
+                self.writer.write_action(&action).unwrap();
+            }
             TokenKind::Minus => println!("Negate"),
             TokenKind::Tilda => println!("BitNot"),
-            TokenKind::Bang => println!("Not"),
-            TokenKind::Typeof => println!("Typeof"),
+            TokenKind::Bang => {
+                let action = swf::avm1::types::Action::Not;
+                self.writer.write_action(&action).unwrap();
+            }
+            TokenKind::Typeof => {
+                let action = swf::avm1::types::Action::TypeOf;
+                self.writer.write_action(&action).unwrap();
+            }
             _ => unreachable!(),
         }
 
@@ -162,22 +178,55 @@ impl<'a> Compiler<'a> {
         self.expression_with_precedence(next_precedence)?;
 
         match token.kind {
-            TokenKind::Percent => println!("Mod"),
-            TokenKind::Plus => println!("Add"),
-            TokenKind::Minus => println!("Sub"),
-            TokenKind::Slash => println!("Div"),
-            TokenKind::Star => println!("Mul"),
-            TokenKind::EqualEqual => println!("Equals"),
-            TokenKind::EqualEqualEqual => println!("StrictEquals"),
-            TokenKind::Greater => println!("Greater"),
-            TokenKind::GreaterEqual => {
-                println!("Less");
-                println!("Not");
+            TokenKind::Percent => {
+                let action = swf::avm1::types::Action::Modulo;
+                self.writer.write_action(&action).unwrap();
             }
-            TokenKind::Less => println!("Less"),
+            TokenKind::Plus => {
+                let action = swf::avm1::types::Action::Add2;
+                self.writer.write_action(&action).unwrap();
+            }
+            TokenKind::Minus => {
+                let action = swf::avm1::types::Action::Subtract;
+                self.writer.write_action(&action).unwrap();
+            }
+            TokenKind::Slash => {
+                let action = swf::avm1::types::Action::Divide;
+                self.writer.write_action(&action).unwrap();
+            }
+            TokenKind::Star => {
+                let action = swf::avm1::types::Action::Multiply;
+                self.writer.write_action(&action).unwrap();
+            }
+            TokenKind::EqualEqual => {
+                let action = swf::avm1::types::Action::Equals2;
+                self.writer.write_action(&action).unwrap();
+            }
+            TokenKind::EqualEqualEqual => {
+                let action = swf::avm1::types::Action::StrictEquals;
+                self.writer.write_action(&action).unwrap();
+            }
+            TokenKind::Greater => {
+                let action = swf::avm1::types::Action::Greater;
+                self.writer.write_action(&action).unwrap();
+            }
+            TokenKind::GreaterEqual => {
+                let action = swf::avm1::types::Action::Less;
+                self.writer.write_action(&action).unwrap();
+
+                let action = swf::avm1::types::Action::Not;
+                self.writer.write_action(&action).unwrap();
+            }
+            TokenKind::Less => {
+                let action = swf::avm1::types::Action::Less;
+                self.writer.write_action(&action).unwrap();
+            }
             TokenKind::LessEqual => {
-                println!("Greater");
-                println!("Not");
+                let action = swf::avm1::types::Action::Greater;
+                self.writer.write_action(&action).unwrap();
+
+                let action = swf::avm1::types::Action::Not;
+                self.writer.write_action(&action).unwrap();
             }
             _ => unreachable!(),
         }
@@ -209,12 +258,20 @@ impl<'a> Compiler<'a> {
                 }
                 println!("SetVariable");
             }
-            TokenKind::Number => self.literal(token),
-            TokenKind::String => self.literal(token),
-            TokenKind::False => println!("Push false"),
-            TokenKind::Null => println!("Push null"),
-            TokenKind::True => println!("Push true"),
-            TokenKind::Undefined => println!("Push undefined"),
+            TokenKind::Number => {
+                let i = token.source.parse().unwrap();
+                let value = swf::avm1::types::Value::Int(i);
+                self.push(value);
+            }
+            TokenKind::String => {
+                let s = &token.source[1..token.source.len() - 1];
+                let value = swf::avm1::types::Value::Str(s.into());
+                self.push(value);
+            }
+            TokenKind::False => self.push(swf::avm1::types::Value::Bool(false)),
+            TokenKind::Null => self.push(swf::avm1::types::Value::Null),
+            TokenKind::True => self.push(swf::avm1::types::Value::Bool(true)),
+            TokenKind::Undefined => self.push(swf::avm1::types::Value::Undefined),
             TokenKind::Identifier => self.variable_access(can_assign, token)?,
             TokenKind::Eof => {
                 return Err(CompileError {
@@ -263,7 +320,10 @@ impl<'a> Compiler<'a> {
         self.expression()?;
         self.expect(TokenKind::RightParen, "Expected ')' after expression")?;
         self.expect(TokenKind::Semicolon, "Expected ';' after statement")?;
-        println!("Trace");
+
+        let action = swf::avm1::types::Action::Trace;
+        self.writer.write_action(&action).unwrap();
+
         Ok(())
     }
 
@@ -284,7 +344,10 @@ impl<'a> Compiler<'a> {
     fn expression_statement(&mut self) -> Result<(), CompileError> {
         self.expression()?;
         self.expect(TokenKind::Semicolon, "Expected ';' after statement")?;
-        println!("Pop");
+
+        let action = swf::avm1::types::Action::Pop;
+        self.writer.write_action(&action).unwrap();
+
         Ok(())
     }
 
@@ -347,6 +410,29 @@ impl<'a> Compiler<'a> {
     }
 }
 
-pub fn compile(source: &str) -> Result<(), CompileError> {
-    Compiler::new(source).compile()
+pub fn compile<W: std::io::Write>(source: &str, output: W) -> Result<(), CompileError> {
+    let mut action_data = vec![];
+    Compiler::new(source, &mut action_data).compile()?;
+
+    const SWF_VERSION: u8 = 32;
+    let header = swf::Header {
+        compression: swf::Compression::None,
+        version: SWF_VERSION,
+        stage_size: swf::Rectangle {
+            x_min: swf::Twips::new(0),
+            x_max: swf::Twips::new(100),
+            y_min: swf::Twips::new(0),
+            y_max: swf::Twips::new(100),
+        },
+        frame_rate: swf::Fixed8::ONE,
+        num_frames: 0,
+    };
+    let tags = vec![
+        swf::Tag::FileAttributes(swf::FileAttributes::empty()),
+        swf::Tag::SetBackgroundColor(swf::Color::from_rgb(0xeeeeee, 255)),
+        swf::Tag::DoAction(&action_data),
+        swf::Tag::ShowFrame,
+    ];
+    swf::write_swf(&header, &tags, output).unwrap();
+    Ok(())
 }
