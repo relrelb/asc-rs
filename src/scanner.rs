@@ -44,6 +44,7 @@ pub enum TokenKind {
     Trace,
     Typeof,
     Var,
+    While,
 
     // End-of-file.
     Eof,
@@ -227,6 +228,7 @@ impl<'a> Scanner<'a> {
                 "typeof" => TokenKind::Typeof,
                 "undefined" => TokenKind::Undefined,
                 "var" => TokenKind::Var,
+                "while" => TokenKind::While,
                 _ => TokenKind::Identifier,
             },
             Some(c) => {

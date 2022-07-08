@@ -54,6 +54,7 @@ impl From<TokenKind> for Precedence {
             TokenKind::Trace => Self::None,
             TokenKind::Typeof => Self::Unary,
             TokenKind::Var => Self::None,
+            TokenKind::While => Self::None,
             TokenKind::Eof => Self::None,
         }
     }
@@ -356,11 +357,40 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
+    fn while_statement(&mut self) -> Result<(), CompileError> {
+        let condition = Vec::new();
+        let old_action_data = std::mem::replace(&mut self.action_data, condition);
+        self.expect(TokenKind::LeftParen, "Expected '(' after while")?;
+        self.expression()?;
+        self.expect(TokenKind::RightParen, "Expected ')' after condition")?;
+        self.write_action(swf::avm1::types::Action::Not);
+
+        let body = Vec::new();
+        let condition = std::mem::replace(&mut self.action_data, body);
+        self.statement()?;
+        let body = &self.action_data;
+        const JUMP_SIZE: usize = 5;
+        self.write_action(swf::avm1::types::Action::Jump(swf::avm1::types::Jump {
+            offset: -i16::try_from(condition.len() + body.len() + JUMP_SIZE * 2).unwrap(),
+        }));
+
+        let body = std::mem::replace(&mut self.action_data, old_action_data);
+        self.action_data.extend(condition);
+        self.write_action(swf::avm1::types::Action::If(swf::avm1::types::If {
+            offset: body.len().try_into().unwrap(),
+        }));
+        self.action_data.extend(body);
+
+        Ok(())
+    }
+
     fn statement(&mut self) -> Result<(), CompileError> {
         if self.consume(TokenKind::LeftBrace)? {
             self.block_statement()
         } else if self.consume(TokenKind::If)? {
             self.if_statement()
+        } else if self.consume(TokenKind::While)? {
+            self.while_statement()
         } else if self.consume(TokenKind::Trace)? {
             self.trace_statement()
         } else {
