@@ -52,6 +52,7 @@ impl From<TokenKind> for Precedence {
             TokenKind::String => Self::None,
             TokenKind::True => Self::None,
             TokenKind::Undefined => Self::None,
+            TokenKind::Throw => Self::Unary,
             TokenKind::Trace => Self::None,
             TokenKind::Typeof => Self::Unary,
             TokenKind::Var => Self::None,
@@ -161,6 +162,7 @@ impl<'a> Compiler<'a> {
             TokenKind::Minus => self.write_action(swf::avm1::types::Action::Subtract),
             TokenKind::Tilda => self.write_action(swf::avm1::types::Action::BitXor),
             TokenKind::Bang => self.write_action(swf::avm1::types::Action::Not),
+            TokenKind::Throw => self.write_action(swf::avm1::types::Action::Throw),
             TokenKind::Typeof => self.write_action(swf::avm1::types::Action::TypeOf),
             _ => unreachable!(),
         }
@@ -217,6 +219,7 @@ impl<'a> Compiler<'a> {
             | TokenKind::Minus
             | TokenKind::Tilda
             | TokenKind::Bang
+            | TokenKind::Throw
             | TokenKind::Typeof => self.unary(token)?,
             TokenKind::PlusPlus | TokenKind::MinusMinus => {
                 let variable = self.expect(TokenKind::Identifier, "Expected variable")?;
