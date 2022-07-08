@@ -44,8 +44,9 @@ impl From<TokenKind> for Precedence {
             TokenKind::LessEqual => Self::Comparison,
             TokenKind::Else => Self::None,
             TokenKind::False => Self::None,
-            TokenKind::If => Self::None,
             TokenKind::Identifier => Self::None,
+            TokenKind::If => Self::None,
+            TokenKind::InstanceOf => Self::Comparison,
             TokenKind::Null => Self::None,
             TokenKind::Number => Self::None,
             TokenKind::String => Self::None,
@@ -197,6 +198,7 @@ impl<'a> Compiler<'a> {
                 self.write_action(swf::avm1::types::Action::Greater);
                 self.write_action(swf::avm1::types::Action::Not);
             }
+            TokenKind::InstanceOf => self.write_action(swf::avm1::types::Action::InstanceOf),
             _ => unreachable!(),
         }
 

@@ -41,6 +41,7 @@ pub enum TokenKind {
     // Keywords.
     Else,
     If,
+    InstanceOf,
     Trace,
     Typeof,
     Var,
@@ -222,6 +223,7 @@ impl<'a> Scanner<'a> {
                 "else" => TokenKind::Else,
                 "false" => TokenKind::False,
                 "if" => TokenKind::If,
+                "instanceof" => TokenKind::InstanceOf,
                 "null" => TokenKind::Null,
                 "trace" => TokenKind::Trace,
                 "true" => TokenKind::True,
