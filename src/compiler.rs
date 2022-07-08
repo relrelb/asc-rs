@@ -74,6 +74,10 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    fn write_action(&mut self, action: swf::avm1::types::Action) {
+        self.writer.write_action(&action).unwrap();
+    }
+
     fn read_token(&mut self) -> Result<Token, CompileError> {
         let next_token = self.scanner.read_token()?;
         let token = std::mem::replace(&mut self.current, next_token);
@@ -118,8 +122,7 @@ impl<'a> Compiler<'a> {
         let push = swf::avm1::types::Push {
             values: vec![value],
         };
-        let action = swf::avm1::types::Action::Push(push);
-        self.writer.write_action(&action).unwrap();
+        self.write_action(swf::avm1::types::Action::Push(push));
     }
 
     fn variable_access(&mut self, can_assign: bool, token: Token) -> Result<(), CompileError> {
@@ -151,26 +154,11 @@ impl<'a> Compiler<'a> {
         self.expression_with_precedence(Precedence::Unary)?;
 
         match token.kind {
-            TokenKind::Plus => {
-                let action = swf::avm1::types::Action::ToNumber;
-                self.writer.write_action(&action).unwrap();
-            }
-            TokenKind::Minus => {
-                let action = swf::avm1::types::Action::Subtract;
-                self.writer.write_action(&action).unwrap();
-            }
-            TokenKind::Tilda => {
-                let action = swf::avm1::types::Action::BitXor;
-                self.writer.write_action(&action).unwrap();
-            }
-            TokenKind::Bang => {
-                let action = swf::avm1::types::Action::Not;
-                self.writer.write_action(&action).unwrap();
-            }
-            TokenKind::Typeof => {
-                let action = swf::avm1::types::Action::TypeOf;
-                self.writer.write_action(&action).unwrap();
-            }
+            TokenKind::Plus => self.write_action(swf::avm1::types::Action::ToNumber),
+            TokenKind::Minus => self.write_action(swf::avm1::types::Action::Subtract),
+            TokenKind::Tilda => self.write_action(swf::avm1::types::Action::BitXor),
+            TokenKind::Bang => self.write_action(swf::avm1::types::Action::Not),
+            TokenKind::Typeof => self.write_action(swf::avm1::types::Action::TypeOf),
             _ => unreachable!(),
         }
 
@@ -190,55 +178,22 @@ impl<'a> Compiler<'a> {
         self.expression_with_precedence(next_precedence)?;
 
         match token.kind {
-            TokenKind::Percent => {
-                let action = swf::avm1::types::Action::Modulo;
-                self.writer.write_action(&action).unwrap();
-            }
-            TokenKind::Plus => {
-                let action = swf::avm1::types::Action::Add2;
-                self.writer.write_action(&action).unwrap();
-            }
-            TokenKind::Minus => {
-                let action = swf::avm1::types::Action::Subtract;
-                self.writer.write_action(&action).unwrap();
-            }
-            TokenKind::Slash => {
-                let action = swf::avm1::types::Action::Divide;
-                self.writer.write_action(&action).unwrap();
-            }
-            TokenKind::Star => {
-                let action = swf::avm1::types::Action::Multiply;
-                self.writer.write_action(&action).unwrap();
-            }
-            TokenKind::EqualEqual => {
-                let action = swf::avm1::types::Action::Equals2;
-                self.writer.write_action(&action).unwrap();
-            }
-            TokenKind::EqualEqualEqual => {
-                let action = swf::avm1::types::Action::StrictEquals;
-                self.writer.write_action(&action).unwrap();
-            }
-            TokenKind::Greater => {
-                let action = swf::avm1::types::Action::Greater;
-                self.writer.write_action(&action).unwrap();
-            }
+            TokenKind::Percent => self.write_action(swf::avm1::types::Action::Modulo),
+            TokenKind::Plus => self.write_action(swf::avm1::types::Action::Add2),
+            TokenKind::Minus => self.write_action(swf::avm1::types::Action::Subtract),
+            TokenKind::Slash => self.write_action(swf::avm1::types::Action::Divide),
+            TokenKind::Star => self.write_action(swf::avm1::types::Action::Multiply),
+            TokenKind::EqualEqual => self.write_action(swf::avm1::types::Action::Equals2),
+            TokenKind::EqualEqualEqual => self.write_action(swf::avm1::types::Action::StrictEquals),
+            TokenKind::Greater => self.write_action(swf::avm1::types::Action::Greater),
             TokenKind::GreaterEqual => {
-                let action = swf::avm1::types::Action::Less;
-                self.writer.write_action(&action).unwrap();
-
-                let action = swf::avm1::types::Action::Not;
-                self.writer.write_action(&action).unwrap();
+                self.write_action(swf::avm1::types::Action::Less);
+                self.write_action(swf::avm1::types::Action::Not);
             }
-            TokenKind::Less => {
-                let action = swf::avm1::types::Action::Less;
-                self.writer.write_action(&action).unwrap();
-            }
+            TokenKind::Less => self.write_action(swf::avm1::types::Action::Less),
             TokenKind::LessEqual => {
-                let action = swf::avm1::types::Action::Greater;
-                self.writer.write_action(&action).unwrap();
-
-                let action = swf::avm1::types::Action::Not;
-                self.writer.write_action(&action).unwrap();
+                self.write_action(swf::avm1::types::Action::Greater);
+                self.write_action(swf::avm1::types::Action::Not);
             }
             _ => unreachable!(),
         }
@@ -332,10 +287,7 @@ impl<'a> Compiler<'a> {
         self.expression()?;
         self.expect(TokenKind::RightParen, "Expected ')' after expression")?;
         self.expect(TokenKind::Semicolon, "Expected ';' after statement")?;
-
-        let action = swf::avm1::types::Action::Trace;
-        self.writer.write_action(&action).unwrap();
-
+        self.write_action(swf::avm1::types::Action::Trace);
         Ok(())
     }
 
@@ -356,10 +308,7 @@ impl<'a> Compiler<'a> {
     fn expression_statement(&mut self) -> Result<(), CompileError> {
         self.expression()?;
         self.expect(TokenKind::Semicolon, "Expected ';' after statement")?;
-
-        let action = swf::avm1::types::Action::Pop;
-        self.writer.write_action(&action).unwrap();
-
+        self.write_action(swf::avm1::types::Action::Pop);
         Ok(())
     }
 
