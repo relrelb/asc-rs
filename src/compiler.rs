@@ -126,7 +126,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn variable_access(&mut self, can_assign: bool, token: Token) -> Result<(), CompileError> {
-        println!("Push \"{}\"", token.source);
+        self.push(swf::avm1::types::Value::Str(token.source.into()));
         if can_assign && self.consume(TokenKind::Equal)? {
             self.expression()?;
             println!("SetVariable");
@@ -139,7 +139,7 @@ impl<'a> Compiler<'a> {
             println!("Decrement");
             println!("SetVariable");
         } else {
-            println!("GetVariable");
+            self.write_action(swf::avm1::types::Action::GetVariable);
         }
         Ok(())
     }
