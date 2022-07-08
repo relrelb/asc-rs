@@ -229,13 +229,11 @@ impl<'a> Compiler<'a> {
             }
             TokenKind::Number => {
                 let i = token.source.parse().unwrap();
-                let value = swf::avm1::types::Value::Int(i);
-                self.push(value);
+                self.push(swf::avm1::types::Value::Int(i));
             }
             TokenKind::String => {
                 let s = &token.source[1..token.source.len() - 1];
-                let value = swf::avm1::types::Value::Str(s.into());
-                self.push(value);
+                self.push(swf::avm1::types::Value::Str(s.into()));
             }
             TokenKind::False => self.push(swf::avm1::types::Value::Bool(false)),
             TokenKind::Null => self.push(swf::avm1::types::Value::Null),
@@ -294,16 +292,18 @@ impl<'a> Compiler<'a> {
     }
 
     fn variable_declaration(&mut self) -> Result<(), CompileError> {
-        let name = self.expect(TokenKind::Identifier, "Expected variable name")?;
-        // TODO: Cannot use `self.literal()` here because of borrow checker.
-        println!("Push \"{}\"", name.source);
+        let name = self
+            .expect(TokenKind::Identifier, "Expected variable name")?
+            .source
+            .to_owned();
+        self.push(swf::avm1::types::Value::Str(name.as_str().into()));
         if self.consume(TokenKind::Equal)? {
             self.expression()?;
+            self.write_action(swf::avm1::types::Action::DefineLocal);
         } else {
-            println!("Push undefined");
+            self.write_action(swf::avm1::types::Action::DefineLocal2);
         }
         self.expect(TokenKind::Semicolon, "Expected ';' after statement")?;
-        println!("SetVariable");
         Ok(())
     }
 
