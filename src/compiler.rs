@@ -62,20 +62,21 @@ impl From<TokenKind> for Precedence {
 struct Compiler<'a> {
     scanner: Scanner<'a>,
     current: Token<'a>,
-    writer: swf::avm1::write::Writer<&'a mut Vec<u8>>,
+    action_data: Vec<u8>,
 }
 
 impl<'a> Compiler<'a> {
-    fn new(source: &'a str, output: &'a mut Vec<u8>) -> Self {
+    fn new(source: &'a str) -> Self {
         Self {
             scanner: Scanner::new(source),
             current: Token::INVALID,
-            writer: swf::avm1::write::Writer::new(output, 0),
+            action_data: Vec::new(),
         }
     }
 
     fn write_action(&mut self, action: swf::avm1::types::Action) {
-        self.writer.write_action(&action).unwrap();
+        let mut writer = swf::avm1::write::Writer::new(&mut self.action_data, 0);
+        writer.write_action(&action).unwrap();
     }
 
     fn read_token(&mut self) -> Result<Token, CompileError> {
@@ -328,14 +329,30 @@ impl<'a> Compiler<'a> {
         self.expect(TokenKind::LeftParen, "Expected '(' after if")?;
         self.expression()?;
         self.expect(TokenKind::RightParen, "Expected ')' after condition")?;
-        println!("If");
+        self.write_action(swf::avm1::types::Action::Not);
+
+        let if_body = Vec::new();
+        let old_action_data = std::mem::replace(&mut self.action_data, if_body);
         self.statement()?;
-        println!("After If");
+
+        let mut else_body = Vec::new();
         if self.consume(TokenKind::Else)? {
-            println!("Else");
+            let if_body = std::mem::replace(&mut self.action_data, else_body);
             self.statement()?;
-            println!("After Else");
+            else_body = std::mem::replace(&mut self.action_data, if_body);
+
+            self.write_action(swf::avm1::types::Action::Jump(swf::avm1::types::Jump {
+                offset: else_body.len().try_into().unwrap(),
+            }));
         }
+
+        let if_body = std::mem::replace(&mut self.action_data, old_action_data);
+        self.write_action(swf::avm1::types::Action::If(swf::avm1::types::If {
+            offset: if_body.len().try_into().unwrap(),
+        }));
+        self.action_data.extend(if_body);
+        self.action_data.extend(else_body);
+
         Ok(())
     }
 
@@ -372,8 +389,8 @@ impl<'a> Compiler<'a> {
 }
 
 pub fn compile<W: std::io::Write>(source: &str, output: W) -> Result<(), CompileError> {
-    let mut action_data = vec![];
-    Compiler::new(source, &mut action_data).compile()?;
+    let mut compiler = Compiler::new(source);
+    compiler.compile()?;
 
     const SWF_VERSION: u8 = 32;
     let header = swf::Header {
@@ -391,7 +408,7 @@ pub fn compile<W: std::io::Write>(source: &str, output: W) -> Result<(), Compile
     let tags = vec![
         swf::Tag::FileAttributes(swf::FileAttributes::empty()),
         swf::Tag::SetBackgroundColor(swf::Color::from_rgb(0xeeeeee, 255)),
-        swf::Tag::DoAction(&action_data),
+        swf::Tag::DoAction(&compiler.action_data),
         swf::Tag::ShowFrame,
     ];
     swf::write_swf(&header, &tags, output).unwrap();
