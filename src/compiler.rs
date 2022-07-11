@@ -18,46 +18,20 @@ enum Precedence {
 impl From<TokenKind> for Precedence {
     fn from(kind: TokenKind) -> Self {
         match kind {
-            TokenKind::LeftParen => Self::None,
-            TokenKind::RightParen => Self::None,
-            TokenKind::LeftBrace => Self::None,
-            TokenKind::RightBrace => Self::None,
-            TokenKind::Comma => Self::None,
-            TokenKind::Dot => Self::None,
-            TokenKind::Minus => Self::Term,
-            TokenKind::MinusMinus => Self::None,
-            TokenKind::Percent => Self::Factor,
-            TokenKind::Plus => Self::Term,
-            TokenKind::PlusPlus => Self::None,
-            TokenKind::Semicolon => Self::None,
-            TokenKind::Slash => Self::Factor,
-            TokenKind::Star => Self::Factor,
-            TokenKind::Tilda => Self::Unary,
-            TokenKind::Bang => Self::Unary,
-            TokenKind::BangEqual => Self::Equality,
-            TokenKind::Equal => Self::None,
-            TokenKind::EqualEqual => Self::Equality,
-            TokenKind::EqualEqualEqual => Self::Equality,
-            TokenKind::Greater => Self::Comparison,
-            TokenKind::GreaterEqual => Self::Comparison,
-            TokenKind::Less => Self::Comparison,
-            TokenKind::LessEqual => Self::Comparison,
-            TokenKind::Else => Self::None,
-            TokenKind::False => Self::None,
-            TokenKind::Identifier => Self::None,
-            TokenKind::If => Self::None,
-            TokenKind::InstanceOf => Self::Comparison,
-            TokenKind::Null => Self::None,
-            TokenKind::Number => Self::None,
-            TokenKind::String => Self::None,
-            TokenKind::True => Self::None,
-            TokenKind::Undefined => Self::None,
-            TokenKind::Throw => Self::Unary,
-            TokenKind::Trace => Self::None,
-            TokenKind::Typeof => Self::Unary,
-            TokenKind::Var => Self::None,
-            TokenKind::While => Self::None,
-            TokenKind::Eof => Self::None,
+            TokenKind::Bang | TokenKind::Tilda | TokenKind::Throw | TokenKind::Typeof => {
+                Self::Unary
+            }
+            TokenKind::Star | TokenKind::Slash | TokenKind::Percent => Self::Factor,
+            TokenKind::Plus | TokenKind::Minus => Self::Term,
+            TokenKind::Greater
+            | TokenKind::GreaterEqual
+            | TokenKind::Less
+            | TokenKind::LessEqual
+            | TokenKind::InstanceOf => Self::Comparison,
+            TokenKind::BangEqual | TokenKind::EqualEqual | TokenKind::EqualEqualEqual => {
+                Self::Equality
+            }
+            _ => Self::None,
         }
     }
 }
