@@ -89,18 +89,44 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn grouping(&mut self) -> Result<(), CompileError> {
-        self.expression()?;
-        self.expect(TokenKind::RightParen, "Expected ')' after expression")?;
-        Ok(())
-    }
-
     fn push(&mut self, value: swf::avm1::types::Value) {
         // TODO: Use constant pool.
         let push = swf::avm1::types::Push {
             values: vec![value],
         };
         self.write_action(swf::avm1::types::Action::Push(push));
+    }
+
+    fn grouping(&mut self) -> Result<(), CompileError> {
+        self.expression()?;
+        self.expect(TokenKind::RightParen, "Expected ')' after expression")?;
+        Ok(())
+    }
+
+    fn array(&mut self) -> Result<(), CompileError> {
+        let mut elements = Vec::new();
+        loop {
+            if self.consume(TokenKind::RightSquareBrace)? {
+                break;
+            }
+            let element = Vec::new();
+            let old_action_data = std::mem::replace(&mut self.action_data, element);
+            self.expression()?;
+            let element = std::mem::replace(&mut self.action_data, old_action_data);
+            elements.push(element);
+            if !self.consume(TokenKind::Comma)? {
+                self.expect(TokenKind::RightSquareBrace, "Expected ']' after array")?;
+                break;
+            }
+        }
+        for element in elements.iter().rev() {
+            self.action_data.extend(element);
+        }
+        self.push(swf::avm1::types::Value::Int(
+            elements.len().try_into().unwrap(),
+        ));
+        self.write_action(swf::avm1::types::Action::InitArray);
+        Ok(())
     }
 
     fn variable_access(&mut self, can_assign: bool, token: Token) -> Result<(), CompileError> {
@@ -189,6 +215,7 @@ impl<'a> Compiler<'a> {
         let token = std::mem::replace(&mut self.current, next_token);
         match token.kind {
             TokenKind::LeftParen => self.grouping()?,
+            TokenKind::LeftSquareBrace => self.array()?,
             TokenKind::Plus
             | TokenKind::Minus
             | TokenKind::Tilda
