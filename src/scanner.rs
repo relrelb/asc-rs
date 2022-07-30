@@ -27,8 +27,11 @@ pub enum TokenKind {
     EqualEqual,
     EqualEqualEqual,
     Greater,
+    GreaterGreater,
+    GreaterGreaterGreater,
     GreaterEqual,
     Less,
+    LessLess,
     LessEqual,
 
     // Literals.
@@ -192,12 +195,26 @@ impl<'a> Scanner<'a> {
                     self.read_char();
                     TokenKind::GreaterEqual
                 }
+                Some((_, '>')) => {
+                    self.read_char();
+                    match self.chars.peek() {
+                        Some((_, '>')) => {
+                            self.read_char();
+                            TokenKind::GreaterGreaterGreater
+                        }
+                        _ => TokenKind::GreaterGreater,
+                    }
+                }
                 _ => TokenKind::Greater,
             },
             Some('<') => match self.chars.peek() {
                 Some((_, '=')) => {
                     self.read_char();
                     TokenKind::LessEqual
+                }
+                Some((_, '<')) => {
+                    self.read_char();
+                    TokenKind::LessLess
                 }
                 _ => TokenKind::Less,
             },

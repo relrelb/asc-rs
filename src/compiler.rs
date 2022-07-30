@@ -8,6 +8,7 @@ enum Precedence {
     // And,
     Equality,
     Comparison,
+    Bitwise,
     Term,
     Factor,
     Unary,
@@ -23,6 +24,9 @@ impl From<TokenKind> for Precedence {
             }
             TokenKind::Star | TokenKind::Slash | TokenKind::Percent => Self::Factor,
             TokenKind::Plus | TokenKind::Minus => Self::Term,
+            TokenKind::GreaterGreater | TokenKind::GreaterGreaterGreater | TokenKind::LessLess => {
+                Self::Bitwise
+            }
             TokenKind::Greater
             | TokenKind::GreaterEqual
             | TokenKind::Less
@@ -175,7 +179,8 @@ impl<'a> Compiler<'a> {
             Precedence::None | Precedence::Primary => unreachable!(),
             Precedence::Assignment => Precedence::Equality,
             Precedence::Equality => Precedence::Comparison,
-            Precedence::Comparison => Precedence::Term,
+            Precedence::Comparison => Precedence::Bitwise,
+            Precedence::Bitwise => Precedence::Term,
             Precedence::Term => Precedence::Factor,
             Precedence::Factor => Precedence::Unary,
             Precedence::Unary => Precedence::Primary,
@@ -191,11 +196,16 @@ impl<'a> Compiler<'a> {
             TokenKind::EqualEqual => self.write_action(swf::avm1::types::Action::Equals2),
             TokenKind::EqualEqualEqual => self.write_action(swf::avm1::types::Action::StrictEquals),
             TokenKind::Greater => self.write_action(swf::avm1::types::Action::Greater),
+            TokenKind::GreaterGreater => self.write_action(swf::avm1::types::Action::BitRShift),
+            TokenKind::GreaterGreaterGreater => {
+                self.write_action(swf::avm1::types::Action::BitURShift)
+            }
             TokenKind::GreaterEqual => {
                 self.write_action(swf::avm1::types::Action::Less);
                 self.write_action(swf::avm1::types::Action::Not);
             }
             TokenKind::Less => self.write_action(swf::avm1::types::Action::Less),
+            TokenKind::LessLess => self.write_action(swf::avm1::types::Action::BitLShift),
             TokenKind::LessEqual => {
                 self.write_action(swf::avm1::types::Action::Greater);
                 self.write_action(swf::avm1::types::Action::Not);
