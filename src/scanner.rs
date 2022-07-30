@@ -153,7 +153,7 @@ impl<'a> Scanner<'a> {
 
     fn read_identifier(&mut self) -> &str {
         let start = self.offset;
-        while let Some((_, 'A'..='Z' | 'a'..='z' | '0'..='9')) = self.chars.peek() {
+        while let Some((_, 'A'..='Z' | 'a'..='z' | '0'..='9' | '_' | '$')) = self.chars.peek() {
             self.read_char();
         }
         let end = (self.offset + 1).min(self.source.len());
@@ -247,7 +247,7 @@ impl<'a> Scanner<'a> {
             Some('~') => TokenKind::Tilda,
             Some('0'..='9') => self.read_number()?,
             Some(quote @ ('"' | '\'')) => self.read_string(quote)?,
-            Some('A'..='Z' | 'a'..='z') => match self.read_identifier() {
+            Some('A'..='Z' | 'a'..='z' | '_' | '$') => match self.read_identifier() {
                 "else" => TokenKind::Else,
                 "false" => TokenKind::False,
                 "if" => TokenKind::If,
