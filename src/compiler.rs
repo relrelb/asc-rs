@@ -316,6 +316,14 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
+    fn chr(&mut self) -> Result<(), CompileError> {
+        self.expect(TokenKind::LeftParen, "Expected '('")?;
+        self.expression()?;
+        self.expect(TokenKind::RightParen, "Expected ')'")?;
+        self.write_action(swf::avm1::types::Action::AsciiToChar);
+        Ok(())
+    }
+
     fn get_timer(&mut self) -> Result<(), CompileError> {
         self.expect(TokenKind::LeftParen, "Expected '('")?;
         self.expect(TokenKind::RightParen, "Expected ')'")?;
@@ -367,10 +375,13 @@ impl<'a> Compiler<'a> {
             TokenKind::Null => self.push(swf::avm1::types::Value::Null),
             TokenKind::True => self.push(swf::avm1::types::Value::Bool(true)),
             TokenKind::Undefined => self.push(swf::avm1::types::Value::Undefined),
-            TokenKind::Identifier if token.source == "getTimer" => self.get_timer()?,
-            TokenKind::Identifier if token.source == "ord" => self.ord()?,
-            TokenKind::Identifier if token.source == "random" => self.random()?,
-            TokenKind::Identifier => self.variable_access(can_assign, token)?,
+            TokenKind::Identifier => match token.source {
+                "chr" => self.chr()?,
+                "getTimer" => self.get_timer()?,
+                "ord" => self.ord()?,
+                "random" => self.random()?,
+                _ => self.variable_access(can_assign, token)?,
+            },
             TokenKind::Eof => {
                 return Err(CompileError {
                     message: "Unexpected end of file".to_string(),
