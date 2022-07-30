@@ -316,6 +316,14 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
+    fn random(&mut self) -> Result<(), CompileError> {
+        self.expect(TokenKind::LeftParen, "Expected '('")?;
+        self.expression()?;
+        self.expect(TokenKind::RightParen, "Expected ')'")?;
+        self.write_action(swf::avm1::types::Action::RandomNumber);
+        Ok(())
+    }
+
     fn expression_with_precedence(&mut self, precedence: Precedence) -> Result<(), CompileError> {
         let can_assign = precedence <= Precedence::Assignment;
 
@@ -344,6 +352,7 @@ impl<'a> Compiler<'a> {
             TokenKind::Null => self.push(swf::avm1::types::Value::Null),
             TokenKind::True => self.push(swf::avm1::types::Value::Bool(true)),
             TokenKind::Undefined => self.push(swf::avm1::types::Value::Undefined),
+            TokenKind::Identifier if token.source == "random" => self.random()?,
             TokenKind::Identifier => self.variable_access(can_assign, token)?,
             TokenKind::Eof => {
                 return Err(CompileError {
