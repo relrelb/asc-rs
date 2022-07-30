@@ -6,9 +6,12 @@ enum Precedence {
     Assignment,
     // Or,
     // And,
+    // BitwiseOr,
+    // BitwiseXor,
+    BitwiseAnd,
     Equality,
     Comparison,
-    Bitwise,
+    BitwiseShift,
     Term,
     Factor,
     Unary,
@@ -25,7 +28,7 @@ impl From<TokenKind> for Precedence {
             TokenKind::Star | TokenKind::Slash | TokenKind::Percent => Self::Factor,
             TokenKind::Plus | TokenKind::Minus => Self::Term,
             TokenKind::DoubleGreater | TokenKind::TripleGreater | TokenKind::DoubleLess => {
-                Self::Bitwise
+                Self::BitwiseShift
             }
             TokenKind::Greater
             | TokenKind::GreaterEqual
@@ -35,6 +38,7 @@ impl From<TokenKind> for Precedence {
             TokenKind::BangEqual | TokenKind::DoubleEqual | TokenKind::TripleEqual => {
                 Self::Equality
             }
+            TokenKind::Ampersand => Self::BitwiseAnd,
             _ => Self::None,
         }
     }
@@ -177,10 +181,11 @@ impl<'a> Compiler<'a> {
     fn binary(&mut self, token: Token) -> Result<(), CompileError> {
         let next_precedence = match Precedence::from(token.kind) {
             Precedence::None | Precedence::Primary => unreachable!(),
-            Precedence::Assignment => Precedence::Equality,
+            Precedence::Assignment => Precedence::BitwiseAnd,
+            Precedence::BitwiseAnd => Precedence::Equality,
             Precedence::Equality => Precedence::Comparison,
-            Precedence::Comparison => Precedence::Bitwise,
-            Precedence::Bitwise => Precedence::Term,
+            Precedence::Comparison => Precedence::BitwiseShift,
+            Precedence::BitwiseShift => Precedence::Term,
             Precedence::Term => Precedence::Factor,
             Precedence::Factor => Precedence::Unary,
             Precedence::Unary => Precedence::Primary,
@@ -188,6 +193,7 @@ impl<'a> Compiler<'a> {
         self.expression_with_precedence(next_precedence)?;
 
         match token.kind {
+            TokenKind::Ampersand => self.write_action(swf::avm1::types::Action::BitAnd),
             TokenKind::Percent => self.write_action(swf::avm1::types::Action::Modulo),
             TokenKind::Plus => self.write_action(swf::avm1::types::Action::Add2),
             TokenKind::Minus => self.write_action(swf::avm1::types::Action::Subtract),

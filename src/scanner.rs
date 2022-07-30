@@ -10,6 +10,7 @@ pub enum TokenKind {
     RightBrace,       // {
     LeftSquareBrace,  // [
     RightSquareBrace, // ]
+    Ampersand,        // &
     Bang,             // !
     BangEqual,        // !=
     Comma,            // ,
@@ -170,6 +171,7 @@ impl<'a> Scanner<'a> {
             Some('}') => TokenKind::RightBrace,
             Some('[') => TokenKind::LeftSquareBrace,
             Some(']') => TokenKind::RightSquareBrace,
+            Some('&') => TokenKind::Ampersand,
             Some('!') => match self.chars.peek() {
                 Some((_, '=')) => {
                     self.read_char();
