@@ -142,20 +142,24 @@ impl<'a> Compiler<'a> {
 
     fn variable_access(&mut self, can_assign: bool, token: Token) -> Result<(), CompileError> {
         self.push(swf::avm1::types::Value::Str(token.source.into()));
+
         if can_assign && self.consume(TokenKind::Equal)? {
             self.expression()?;
-            println!("SetVariable");
+            self.write_action(swf::avm1::types::Action::SetVariable);
         } else if self.consume(TokenKind::DoublePlus)? {
-            println!("GetVariable");
-            println!("Increment");
-            println!("SetVariable");
+            self.push(swf::avm1::types::Value::Str(token.source.into()));
+            self.write_action(swf::avm1::types::Action::GetVariable);
+            self.write_action(swf::avm1::types::Action::Increment);
+            self.write_action(swf::avm1::types::Action::SetVariable);
         } else if self.consume(TokenKind::DoubleMinus)? {
-            println!("GetVariable");
-            println!("Decrement");
-            println!("SetVariable");
+            self.push(swf::avm1::types::Value::Str(token.source.into()));
+            self.write_action(swf::avm1::types::Action::GetVariable);
+            self.write_action(swf::avm1::types::Action::Decrement);
+            self.write_action(swf::avm1::types::Action::SetVariable);
         } else {
             self.write_action(swf::avm1::types::Action::GetVariable);
         }
+
         Ok(())
     }
 
