@@ -12,6 +12,7 @@ pub enum TokenKind {
     RightSquareBrace, // ]
     Ampersand,        // &
     Bang,             // !
+    Bar,              // |
     BangEqual,        // !=
     Comma,            // ,
     Dot,              // .
@@ -179,6 +180,7 @@ impl<'a> Scanner<'a> {
                 }
                 _ => TokenKind::Bang,
             },
+            Some('|') => TokenKind::Bar,
             Some(',') => TokenKind::Comma,
             Some('.') => TokenKind::Dot,
             Some('=') => match self.chars.peek() {

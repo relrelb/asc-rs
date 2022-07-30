@@ -6,7 +6,7 @@ enum Precedence {
     Assignment,
     // Or,
     // And,
-    // BitwiseOr,
+    BitwiseOr,
     // BitwiseXor,
     BitwiseAnd,
     Equality,
@@ -39,6 +39,7 @@ impl From<TokenKind> for Precedence {
                 Self::Equality
             }
             TokenKind::Ampersand => Self::BitwiseAnd,
+            TokenKind::Bar => Self::BitwiseOr,
             _ => Self::None,
         }
     }
@@ -181,7 +182,8 @@ impl<'a> Compiler<'a> {
     fn binary(&mut self, token: Token) -> Result<(), CompileError> {
         let next_precedence = match Precedence::from(token.kind) {
             Precedence::None | Precedence::Primary => unreachable!(),
-            Precedence::Assignment => Precedence::BitwiseAnd,
+            Precedence::Assignment => Precedence::BitwiseOr,
+            Precedence::BitwiseOr => Precedence::BitwiseAnd,
             Precedence::BitwiseAnd => Precedence::Equality,
             Precedence::Equality => Precedence::Comparison,
             Precedence::Comparison => Precedence::BitwiseShift,
@@ -194,6 +196,7 @@ impl<'a> Compiler<'a> {
 
         match token.kind {
             TokenKind::Ampersand => self.write_action(swf::avm1::types::Action::BitAnd),
+            TokenKind::Bar => self.write_action(swf::avm1::types::Action::BitOr),
             TokenKind::Percent => self.write_action(swf::avm1::types::Action::Modulo),
             TokenKind::Plus => self.write_action(swf::avm1::types::Action::Add2),
             TokenKind::Minus => self.write_action(swf::avm1::types::Action::Subtract),
