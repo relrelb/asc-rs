@@ -323,6 +323,14 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
+    fn ord(&mut self) -> Result<(), CompileError> {
+        self.expect(TokenKind::LeftParen, "Expected '('")?;
+        self.expression()?;
+        self.expect(TokenKind::RightParen, "Expected ')'")?;
+        self.write_action(swf::avm1::types::Action::CharToAscii);
+        Ok(())
+    }
+
     fn random(&mut self) -> Result<(), CompileError> {
         self.expect(TokenKind::LeftParen, "Expected '('")?;
         self.expression()?;
@@ -360,6 +368,7 @@ impl<'a> Compiler<'a> {
             TokenKind::True => self.push(swf::avm1::types::Value::Bool(true)),
             TokenKind::Undefined => self.push(swf::avm1::types::Value::Undefined),
             TokenKind::Identifier if token.source == "getTimer" => self.get_timer()?,
+            TokenKind::Identifier if token.source == "ord" => self.ord()?,
             TokenKind::Identifier if token.source == "random" => self.random()?,
             TokenKind::Identifier => self.variable_access(can_assign, token)?,
             TokenKind::Eof => {
