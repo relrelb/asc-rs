@@ -378,9 +378,10 @@ impl<'a> Compiler<'a> {
             TokenKind::Identifier => match token.source {
                 "chr" => self.builtin(swf::avm1::types::Action::AsciiToChar, 1)?,
                 "getTimer" => self.builtin(swf::avm1::types::Action::GetTime, 0)?,
-                "play" => self.builtin(swf::avm1::types::Action::Play, 0)?,
                 "ord" => self.builtin(swf::avm1::types::Action::CharToAscii, 1)?,
+                "play" => self.builtin(swf::avm1::types::Action::Play, 0)?,
                 "random" => self.builtin(swf::avm1::types::Action::RandomNumber, 1)?,
+                "stop" => self.builtin(swf::avm1::types::Action::Stop, 0)?,
                 _ => self.variable_access(can_assign, token)?,
             },
             TokenKind::Eof => {
