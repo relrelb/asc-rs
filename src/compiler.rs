@@ -24,7 +24,7 @@ impl From<TokenKind> for Precedence {
             }
             TokenKind::Star | TokenKind::Slash | TokenKind::Percent => Self::Factor,
             TokenKind::Plus | TokenKind::Minus => Self::Term,
-            TokenKind::GreaterGreater | TokenKind::GreaterGreaterGreater | TokenKind::LessLess => {
+            TokenKind::DoubleGreater | TokenKind::TripleGreater | TokenKind::DoubleLess => {
                 Self::Bitwise
             }
             TokenKind::Greater
@@ -32,7 +32,7 @@ impl From<TokenKind> for Precedence {
             | TokenKind::Less
             | TokenKind::LessEqual
             | TokenKind::InstanceOf => Self::Comparison,
-            TokenKind::BangEqual | TokenKind::EqualEqual | TokenKind::EqualEqualEqual => {
+            TokenKind::BangEqual | TokenKind::DoubleEqual | TokenKind::TripleEqual => {
                 Self::Equality
             }
             _ => Self::None,
@@ -138,11 +138,11 @@ impl<'a> Compiler<'a> {
         if can_assign && self.consume(TokenKind::Equal)? {
             self.expression()?;
             println!("SetVariable");
-        } else if self.consume(TokenKind::PlusPlus)? {
+        } else if self.consume(TokenKind::DoublePlus)? {
             println!("GetVariable");
             println!("Increment");
             println!("SetVariable");
-        } else if self.consume(TokenKind::MinusMinus)? {
+        } else if self.consume(TokenKind::DoubleMinus)? {
             println!("GetVariable");
             println!("Decrement");
             println!("SetVariable");
@@ -193,19 +193,17 @@ impl<'a> Compiler<'a> {
             TokenKind::Minus => self.write_action(swf::avm1::types::Action::Subtract),
             TokenKind::Slash => self.write_action(swf::avm1::types::Action::Divide),
             TokenKind::Star => self.write_action(swf::avm1::types::Action::Multiply),
-            TokenKind::EqualEqual => self.write_action(swf::avm1::types::Action::Equals2),
-            TokenKind::EqualEqualEqual => self.write_action(swf::avm1::types::Action::StrictEquals),
+            TokenKind::DoubleEqual => self.write_action(swf::avm1::types::Action::Equals2),
+            TokenKind::TripleEqual => self.write_action(swf::avm1::types::Action::StrictEquals),
             TokenKind::Greater => self.write_action(swf::avm1::types::Action::Greater),
-            TokenKind::GreaterGreater => self.write_action(swf::avm1::types::Action::BitRShift),
-            TokenKind::GreaterGreaterGreater => {
-                self.write_action(swf::avm1::types::Action::BitURShift)
-            }
+            TokenKind::DoubleGreater => self.write_action(swf::avm1::types::Action::BitRShift),
+            TokenKind::TripleGreater => self.write_action(swf::avm1::types::Action::BitURShift),
             TokenKind::GreaterEqual => {
                 self.write_action(swf::avm1::types::Action::Less);
                 self.write_action(swf::avm1::types::Action::Not);
             }
             TokenKind::Less => self.write_action(swf::avm1::types::Action::Less),
-            TokenKind::LessLess => self.write_action(swf::avm1::types::Action::BitLShift),
+            TokenKind::DoubleLess => self.write_action(swf::avm1::types::Action::BitLShift),
             TokenKind::LessEqual => {
                 self.write_action(swf::avm1::types::Action::Greater);
                 self.write_action(swf::avm1::types::Action::Not);
@@ -232,13 +230,13 @@ impl<'a> Compiler<'a> {
             | TokenKind::Bang
             | TokenKind::Throw
             | TokenKind::Typeof => self.unary(token)?,
-            TokenKind::PlusPlus | TokenKind::MinusMinus => {
+            TokenKind::DoublePlus | TokenKind::DoubleMinus => {
                 let variable = self.expect(TokenKind::Identifier, "Expected variable")?;
                 println!("Push \"{}\"", variable.source);
                 println!("GetVariable");
                 match token.kind {
-                    TokenKind::PlusPlus => println!("Increment"),
-                    TokenKind::MinusMinus => println!("Decrement"),
+                    TokenKind::DoublePlus => println!("Increment"),
+                    TokenKind::DoubleMinus => println!("Decrement"),
                     _ => unreachable!(),
                 }
                 println!("SetVariable");
