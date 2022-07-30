@@ -382,6 +382,7 @@ impl<'a> Compiler<'a> {
                 "play" => self.builtin(swf::avm1::types::Action::Play, 0)?,
                 "random" => self.builtin(swf::avm1::types::Action::RandomNumber, 1)?,
                 "stop" => self.builtin(swf::avm1::types::Action::Stop, 0)?,
+                "stopAllSounds" => self.builtin(swf::avm1::types::Action::StopSounds, 0)?,
                 _ => self.variable_access(can_assign, token)?,
             },
             TokenKind::Eof => {
