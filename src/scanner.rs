@@ -14,6 +14,7 @@ pub enum TokenKind {
     Bang,             // !
     Bar,              // |
     BangEqual,        // !=
+    Caret,            // ^
     Comma,            // ,
     Dot,              // .
     Equal,            // =
@@ -181,6 +182,7 @@ impl<'a> Scanner<'a> {
                 _ => TokenKind::Bang,
             },
             Some('|') => TokenKind::Bar,
+            Some('^') => TokenKind::Caret,
             Some(',') => TokenKind::Comma,
             Some('.') => TokenKind::Dot,
             Some('=') => match self.chars.peek() {
