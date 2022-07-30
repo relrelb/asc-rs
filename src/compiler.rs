@@ -15,13 +15,14 @@ enum Precedence {
     Term,
     Factor,
     Unary,
-    // Call,
+    Call,
     Primary,
 }
 
 impl From<TokenKind> for Precedence {
     fn from(kind: TokenKind) -> Self {
         match kind {
+            TokenKind::Dot => Self::Call,
             TokenKind::Bang | TokenKind::Tilda | TokenKind::Throw | TokenKind::Typeof => {
                 Self::Unary
             }
@@ -158,6 +159,21 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
+    fn dot(&mut self, can_assign: bool) -> Result<(), CompileError> {
+        let name = self.expect(TokenKind::Identifier, "Expected name")?;
+        let name = name.source.to_owned();
+        self.push(swf::avm1::types::Value::Str(name.as_str().into()));
+
+        if can_assign && self.consume(TokenKind::Equal)? {
+            self.expression()?;
+            self.write_action(swf::avm1::types::Action::SetMember);
+        } else {
+            self.write_action(swf::avm1::types::Action::GetMember);
+        }
+
+        Ok(())
+    }
+
     fn unary(&mut self, token: Token) -> Result<(), CompileError> {
         match token.kind {
             TokenKind::Minus => self.push(swf::avm1::types::Value::Int(0)),
@@ -208,7 +224,8 @@ impl<'a> Compiler<'a> {
             Precedence::BitwiseShift => Precedence::Term,
             Precedence::Term => Precedence::Factor,
             Precedence::Factor => Precedence::Unary,
-            Precedence::Unary => Precedence::Primary,
+            Precedence::Unary => Precedence::Call,
+            Precedence::Call => Precedence::Primary,
         };
         self.expression_with_precedence(next_precedence)?;
 
@@ -293,7 +310,10 @@ impl<'a> Compiler<'a> {
             let next_token = self.scanner.read_token()?;
             let token = std::mem::replace(&mut self.current, next_token);
 
-            self.binary(token)?;
+            match token.kind {
+                TokenKind::Dot => self.dot(can_assign)?,
+                _ => self.binary(token)?,
+            }
         }
 
         if can_assign {
