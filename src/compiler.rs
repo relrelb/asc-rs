@@ -1,4 +1,30 @@
 use crate::scanner::{CompileError, Scanner, Token, TokenKind};
+use phf::phf_map;
+
+static PROPERTIES: phf::Map<&'static str, i32> = phf_map! {
+    "_x" => 0,
+    "_y" => 1,
+    "_xscale" => 2,
+    "_yscale" => 3,
+    "_currentframe" => 4,
+    "_totalframes" => 5,
+    "_alpha" => 6,
+    "_visible" => 7,
+    "_width" => 8,
+    "_height" => 9,
+    "_rotation" => 10,
+    "_target" => 11,
+    "_framesloaded" => 12,
+    "_name" => 13,
+    "_droptarget" => 14,
+    "_url" => 15,
+    "_highquality" => 16,
+    "_focusrect" => 17,
+    "_soundbuftime" => 18,
+    "_quality" => 19,
+    "_xmouse" => 20,
+    "_ymouse" => 21,
+};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum Precedence {
@@ -165,14 +191,26 @@ impl<'a> Compiler<'a> {
 
     fn dot(&mut self, can_assign: bool) -> Result<(), CompileError> {
         let name = self.expect(TokenKind::Identifier, "Expected name")?;
-        let name = name.source.to_owned();
-        self.push(swf::avm1::types::Value::Str(name.as_str().into()));
 
-        if can_assign && self.consume(TokenKind::Equal)? {
-            self.expression()?;
-            self.write_action(swf::avm1::types::Action::SetMember);
+        if let Some(property) = PROPERTIES.get(name.source) {
+            self.push(swf::avm1::types::Value::Int(*property));
+
+            if can_assign && self.consume(TokenKind::Equal)? {
+                self.expression()?;
+                self.write_action(swf::avm1::types::Action::SetProperty);
+            } else {
+                self.write_action(swf::avm1::types::Action::GetProperty);
+            }
         } else {
-            self.write_action(swf::avm1::types::Action::GetMember);
+            let name = name.source.to_owned();
+            self.push(swf::avm1::types::Value::Str(name.as_str().into()));
+
+            if can_assign && self.consume(TokenKind::Equal)? {
+                self.expression()?;
+                self.write_action(swf::avm1::types::Action::SetMember);
+            } else {
+                self.write_action(swf::avm1::types::Action::GetMember);
+            }
         }
 
         Ok(())
