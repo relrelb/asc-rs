@@ -22,7 +22,7 @@ enum Precedence {
 impl From<TokenKind> for Precedence {
     fn from(kind: TokenKind) -> Self {
         match kind {
-            TokenKind::Dot => Self::Call,
+            TokenKind::Dot | TokenKind::LeftSquareBrace => Self::Call,
             TokenKind::Bang | TokenKind::Tilda | TokenKind::Throw | TokenKind::Typeof => {
                 Self::Unary
             }
@@ -178,6 +178,20 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
+    fn member_access(&mut self, can_assign: bool) -> Result<(), CompileError> {
+        self.expression()?;
+        self.expect(TokenKind::RightSquareBrace, "Expected ']'")?;
+
+        if can_assign && self.consume(TokenKind::Equal)? {
+            self.expression()?;
+            self.write_action(swf::avm1::types::Action::SetMember);
+        } else {
+            self.write_action(swf::avm1::types::Action::GetMember);
+        }
+
+        Ok(())
+    }
+
     fn unary(&mut self, token: Token) -> Result<(), CompileError> {
         match token.kind {
             TokenKind::Minus => self.push(swf::avm1::types::Value::Int(0)),
@@ -316,6 +330,7 @@ impl<'a> Compiler<'a> {
 
             match token.kind {
                 TokenKind::Dot => self.dot(can_assign)?,
+                TokenKind::LeftSquareBrace => self.member_access(can_assign)?,
                 _ => self.binary(token)?,
             }
         }
