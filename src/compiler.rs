@@ -315,34 +315,35 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn chr(&mut self) -> Result<(), CompileError> {
+    fn builtin(&mut self, action: swf::avm1::types::Action, arity: usize) -> Result<(), CompileError> {
         self.expect(TokenKind::LeftParen, "Expected '('")?;
-        self.expression()?;
-        self.expect(TokenKind::RightParen, "Expected ')'")?;
-        self.write_action(swf::avm1::types::Action::AsciiToChar);
-        Ok(())
-    }
-
-    fn get_timer(&mut self) -> Result<(), CompileError> {
-        self.expect(TokenKind::LeftParen, "Expected '('")?;
-        self.expect(TokenKind::RightParen, "Expected ')'")?;
-        self.write_action(swf::avm1::types::Action::GetTime);
-        Ok(())
-    }
-
-    fn ord(&mut self) -> Result<(), CompileError> {
-        self.expect(TokenKind::LeftParen, "Expected '('")?;
-        self.expression()?;
-        self.expect(TokenKind::RightParen, "Expected ')'")?;
-        self.write_action(swf::avm1::types::Action::CharToAscii);
-        Ok(())
-    }
-
-    fn random(&mut self) -> Result<(), CompileError> {
-        self.expect(TokenKind::LeftParen, "Expected '('")?;
-        self.expression()?;
-        self.expect(TokenKind::RightParen, "Expected ')'")?;
-        self.write_action(swf::avm1::types::Action::RandomNumber);
+        let mut count = 0;
+        let token = loop {
+            let token = self.peek_token();
+            if token.kind == TokenKind::RightParen {
+                break self.read_token()?;
+            }
+            count += 1;
+            if count > arity {
+                return Err(CompileError {
+                    message: format!("Expected {} argument(s), got {}", arity, count),
+                    line: token.line,
+                    column: token.column,
+                });
+            }
+            self.expression()?;
+            if !self.consume(TokenKind::Comma)? {
+                break self.expect(TokenKind::RightParen, "Expected ')'")?;
+            }
+        };
+        if count < arity {
+            return Err(CompileError {
+                message: format!("Expected {} argument(s), got {}", arity, count),
+                line: token.line,
+                column: token.column,
+            });
+        }
+        self.write_action(action);
         Ok(())
     }
 
@@ -375,10 +376,11 @@ impl<'a> Compiler<'a> {
             TokenKind::True => self.push(swf::avm1::types::Value::Bool(true)),
             TokenKind::Undefined => self.push(swf::avm1::types::Value::Undefined),
             TokenKind::Identifier => match token.source {
-                "chr" => self.chr()?,
-                "getTimer" => self.get_timer()?,
-                "ord" => self.ord()?,
-                "random" => self.random()?,
+                "chr" => self.builtin(swf::avm1::types::Action::AsciiToChar, 1)?,
+                "getTimer" => self.builtin(swf::avm1::types::Action::GetTime, 0)?,
+                "play" => self.builtin(swf::avm1::types::Action::Play, 0)?,
+                "ord" => self.builtin(swf::avm1::types::Action::CharToAscii, 1)?,
+                "random" => self.builtin(swf::avm1::types::Action::RandomNumber, 1)?,
                 _ => self.variable_access(can_assign, token)?,
             },
             TokenKind::Eof => {
