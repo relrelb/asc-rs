@@ -180,6 +180,22 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
+    fn prefix(&mut self, token: Token) -> Result<(), CompileError> {
+        let variable = self.expect(TokenKind::Identifier, "Expected variable")?;
+        let name = variable.source.to_owned();
+        self.push(swf::avm1::types::Value::Str(name.as_str().into()));
+        self.push(swf::avm1::types::Value::Str(name.as_str().into()));
+        self.write_action(swf::avm1::types::Action::GetVariable);
+        match token.kind {
+            TokenKind::DoublePlus => self.write_action(swf::avm1::types::Action::Increment),
+            TokenKind::DoubleMinus => self.write_action(swf::avm1::types::Action::Decrement),
+            _ => unreachable!(),
+        }
+        self.write_action(swf::avm1::types::Action::SetVariable);
+
+        Ok(())
+    }
+
     fn binary(&mut self, token: Token) -> Result<(), CompileError> {
         let next_precedence = match Precedence::from(token.kind) {
             Precedence::None | Precedence::Primary => unreachable!(),
@@ -242,17 +258,7 @@ impl<'a> Compiler<'a> {
             | TokenKind::Bang
             | TokenKind::Throw
             | TokenKind::Typeof => self.unary(token)?,
-            TokenKind::DoublePlus | TokenKind::DoubleMinus => {
-                let variable = self.expect(TokenKind::Identifier, "Expected variable")?;
-                println!("Push \"{}\"", variable.source);
-                println!("GetVariable");
-                match token.kind {
-                    TokenKind::DoublePlus => println!("Increment"),
-                    TokenKind::DoubleMinus => println!("Decrement"),
-                    _ => unreachable!(),
-                }
-                println!("SetVariable");
-            }
+            TokenKind::DoublePlus | TokenKind::DoubleMinus => self.prefix(token)?,
             TokenKind::Number => {
                 let i = token.source.parse().unwrap();
                 self.push(swf::avm1::types::Value::Int(i));
