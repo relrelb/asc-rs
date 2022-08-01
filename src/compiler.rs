@@ -425,7 +425,11 @@ impl<'a> Compiler<'a> {
                 "stopAllSounds" => self.builtin(swf::avm1::types::Action::StopSounds, 0)?,
                 variable_name => {
                     let variable_name = variable_name.to_owned();
-                    self.variable_access(&variable_name, can_assign, is_delete)?
+                    self.variable_access(&variable_name, can_assign, is_delete)?;
+                    if is_delete {
+                        // Skip invalid delete target check.
+                        return Ok(());
+                    }
                 }
             },
             TokenKind::Eof => {
@@ -457,6 +461,17 @@ impl<'a> Compiler<'a> {
             if token.kind == TokenKind::Equal {
                 return Err(CompileError {
                     message: "Invalid assignment target".to_string(),
+                    line: token.line,
+                    column: token.column,
+                });
+            }
+        }
+
+        if is_delete {
+            let token = self.peek_token();
+            if Precedence::from(token.kind) < Precedence::Call {
+                return Err(CompileError {
+                    message: "Invalid delete target".to_string(),
                     line: token.line,
                     column: token.column,
                 });
