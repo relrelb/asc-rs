@@ -140,19 +140,19 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn variable_access(&mut self, can_assign: bool, token: Token) -> Result<(), CompileError> {
-        self.push(swf::avm1::types::Value::Str(token.source.into()));
+    fn variable_access(&mut self, can_assign: bool, name: &str) -> Result<(), CompileError> {
+        self.push(swf::avm1::types::Value::Str(name.into()));
 
         if can_assign && self.consume(TokenKind::Equal)? {
             self.expression()?;
             self.write_action(swf::avm1::types::Action::SetVariable);
         } else if self.consume(TokenKind::DoublePlus)? {
-            self.push(swf::avm1::types::Value::Str(token.source.into()));
+            self.push(swf::avm1::types::Value::Str(name.into()));
             self.write_action(swf::avm1::types::Action::GetVariable);
             self.write_action(swf::avm1::types::Action::Increment);
             self.write_action(swf::avm1::types::Action::SetVariable);
         } else if self.consume(TokenKind::DoubleMinus)? {
-            self.push(swf::avm1::types::Value::Str(token.source.into()));
+            self.push(swf::avm1::types::Value::Str(name.into()));
             self.write_action(swf::avm1::types::Action::GetVariable);
             self.write_action(swf::avm1::types::Action::Decrement);
             self.write_action(swf::avm1::types::Action::SetVariable);
@@ -229,8 +229,8 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn unary(&mut self, token: Token) -> Result<(), CompileError> {
-        match token.kind {
+    fn unary(&mut self, token_kind: TokenKind) -> Result<(), CompileError> {
+        match token_kind {
             TokenKind::Minus => self.push(swf::avm1::types::Value::Int(0)),
             TokenKind::Tilda => self.push(swf::avm1::types::Value::Double(u32::MAX.into())),
             _ => {}
@@ -238,7 +238,7 @@ impl<'a> Compiler<'a> {
 
         self.expression_with_precedence(Precedence::Unary)?;
 
-        match token.kind {
+        match token_kind {
             TokenKind::Plus => self.write_action(swf::avm1::types::Action::ToNumber),
             TokenKind::Minus => self.write_action(swf::avm1::types::Action::Subtract),
             TokenKind::Tilda => self.write_action(swf::avm1::types::Action::BitXor),
@@ -251,13 +251,13 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn prefix(&mut self, token: Token) -> Result<(), CompileError> {
+    fn prefix(&mut self, token_kind: TokenKind) -> Result<(), CompileError> {
         let variable = self.expect(TokenKind::Identifier, "Expected variable")?;
         let name = variable.source.to_owned();
         self.push(swf::avm1::types::Value::Str(name.as_str().into()));
         self.push(swf::avm1::types::Value::Str(name.as_str().into()));
         self.write_action(swf::avm1::types::Action::GetVariable);
-        match token.kind {
+        match token_kind {
             TokenKind::DoublePlus => self.write_action(swf::avm1::types::Action::Increment),
             TokenKind::DoubleMinus => self.write_action(swf::avm1::types::Action::Decrement),
             _ => unreachable!(),
@@ -267,8 +267,8 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn binary(&mut self, token: Token) -> Result<(), CompileError> {
-        let next_precedence = match Precedence::from(token.kind) {
+    fn binary(&mut self, token_kind: TokenKind) -> Result<(), CompileError> {
+        let next_precedence = match Precedence::from(token_kind) {
             Precedence::None | Precedence::Primary => unreachable!(),
             Precedence::Assignment => Precedence::BitwiseOr,
             Precedence::BitwiseOr => Precedence::BitwiseXor,
@@ -284,7 +284,7 @@ impl<'a> Compiler<'a> {
         };
         self.expression_with_precedence(next_precedence)?;
 
-        match token.kind {
+        match token_kind {
             TokenKind::Ampersand => self.write_action(swf::avm1::types::Action::BitAnd),
             TokenKind::Bar => self.write_action(swf::avm1::types::Action::BitOr),
             TokenKind::Caret => self.write_action(swf::avm1::types::Action::BitXor),
@@ -315,7 +315,11 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn builtin(&mut self, action: swf::avm1::types::Action, arity: usize) -> Result<(), CompileError> {
+    fn builtin(
+        &mut self,
+        action: swf::avm1::types::Action,
+        arity: usize,
+    ) -> Result<(), CompileError> {
         self.expect(TokenKind::LeftParen, "Expected '('")?;
         let mut count = 0;
         let token = loop {
@@ -350,26 +354,26 @@ impl<'a> Compiler<'a> {
     fn expression_with_precedence(&mut self, precedence: Precedence) -> Result<(), CompileError> {
         let can_assign = precedence <= Precedence::Assignment;
 
-        // TODO: Cannot use `self.read_token()` here because of borrow checker.
-        let next_token = self.scanner.read_token()?;
-        let token = std::mem::replace(&mut self.current, next_token);
+        let token = self.read_token()?;
         match token.kind {
             TokenKind::LeftParen => self.grouping()?,
             TokenKind::LeftSquareBrace => self.array()?,
-            TokenKind::Plus
+            token_kind @ (TokenKind::Plus
             | TokenKind::Minus
             | TokenKind::Tilda
             | TokenKind::Bang
             | TokenKind::Throw
-            | TokenKind::Typeof => self.unary(token)?,
-            TokenKind::DoublePlus | TokenKind::DoubleMinus => self.prefix(token)?,
+            | TokenKind::Typeof) => self.unary(token_kind)?,
+            token_kind @ (TokenKind::DoublePlus | TokenKind::DoubleMinus) => {
+                self.prefix(token_kind)?
+            }
             TokenKind::Number => {
                 let i = token.source.parse().unwrap();
                 self.push(swf::avm1::types::Value::Int(i));
             }
             TokenKind::String => {
-                let s = &token.source[1..token.source.len() - 1];
-                self.push(swf::avm1::types::Value::Str(s.into()));
+                let s = token.source[1..token.source.len() - 1].to_owned();
+                self.push(swf::avm1::types::Value::Str(s.as_str().into()));
             }
             TokenKind::False => self.push(swf::avm1::types::Value::Bool(false)),
             TokenKind::Null => self.push(swf::avm1::types::Value::Null),
@@ -383,7 +387,10 @@ impl<'a> Compiler<'a> {
                 "random" => self.builtin(swf::avm1::types::Action::RandomNumber, 1)?,
                 "stop" => self.builtin(swf::avm1::types::Action::Stop, 0)?,
                 "stopAllSounds" => self.builtin(swf::avm1::types::Action::StopSounds, 0)?,
-                _ => self.variable_access(can_assign, token)?,
+                variable_name => {
+                    let variable_name = variable_name.to_owned();
+                    self.variable_access(can_assign, &variable_name)?
+                }
             },
             TokenKind::Eof => {
                 return Err(CompileError {
@@ -402,14 +409,10 @@ impl<'a> Compiler<'a> {
         }
 
         while Precedence::from(self.peek_token().kind) >= precedence {
-            // TODO: Cannot use `self.read_token()` here because of borrow checker.
-            let next_token = self.scanner.read_token()?;
-            let token = std::mem::replace(&mut self.current, next_token);
-
-            match token.kind {
+            match self.read_token()?.kind {
                 TokenKind::Dot => self.dot(can_assign)?,
                 TokenKind::LeftSquareBrace => self.member_access(can_assign)?,
-                _ => self.binary(token)?,
+                token_kind => self.binary(token_kind)?,
             }
         }
 
