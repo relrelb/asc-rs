@@ -47,6 +47,7 @@ pub enum TokenKind {
     Undefined,
 
     // Keywords.
+    Delete,
     Else,
     If,
     InstanceOf,
@@ -248,6 +249,7 @@ impl<'a> Scanner<'a> {
             Some('0'..='9') => self.read_number()?,
             Some(quote @ ('"' | '\'')) => self.read_string(quote)?,
             Some('A'..='Z' | 'a'..='z' | '_' | '$') => match self.read_identifier() {
+                "delete" => TokenKind::Delete,
                 "else" => TokenKind::Else,
                 "false" => TokenKind::False,
                 "if" => TokenKind::If,

@@ -23,9 +23,11 @@ impl From<TokenKind> for Precedence {
     fn from(kind: TokenKind) -> Self {
         match kind {
             TokenKind::Dot | TokenKind::LeftSquareBrace => Self::Call,
-            TokenKind::Bang | TokenKind::Tilda | TokenKind::Throw | TokenKind::Typeof => {
-                Self::Unary
-            }
+            TokenKind::Bang
+            | TokenKind::Delete
+            | TokenKind::Tilda
+            | TokenKind::Throw
+            | TokenKind::Typeof => Self::Unary,
             TokenKind::Star | TokenKind::Slash | TokenKind::Percent => Self::Factor,
             TokenKind::Plus | TokenKind::Minus => Self::Term,
             TokenKind::DoubleGreater | TokenKind::TripleGreater | TokenKind::DoubleLess => {
@@ -140,10 +142,17 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn variable_access(&mut self, can_assign: bool, name: &str) -> Result<(), CompileError> {
+    fn variable_access(
+        &mut self,
+        name: &str,
+        can_assign: bool,
+        is_delete: bool,
+    ) -> Result<(), CompileError> {
         self.push(swf::avm1::types::Value::Str(name.into()));
 
-        if can_assign && self.consume(TokenKind::Equal)? {
+        if is_delete && Precedence::from(self.peek_token().kind) < Precedence::Call {
+            self.write_action(swf::avm1::types::Action::Delete2);
+        } else if can_assign && self.consume(TokenKind::Equal)? {
             self.expression()?;
             self.write_action(swf::avm1::types::Action::SetVariable);
         } else if self.consume(TokenKind::DoublePlus)? {
@@ -163,35 +172,16 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn dot(&mut self, can_assign: bool) -> Result<(), CompileError> {
-        let name = self.expect(TokenKind::Identifier, "Expected name")?;
-        let property = match name.source {
-            "_x" => Some(0),
-            "_y" => Some(1),
-            "_xscale" => Some(2),
-            "_yscale" => Some(3),
-            "_currentframe" => Some(4),
-            "_totalframes" => Some(5),
-            "_alpha" => Some(6),
-            "_visible" => Some(7),
-            "_width" => Some(8),
-            "_height" => Some(9),
-            "_rotation" => Some(10),
-            "_target" => Some(11),
-            "_framesloaded" => Some(12),
-            "_name" => Some(13),
-            "_droptarget" => Some(14),
-            "_url" => Some(15),
-            "_highquality" => Some(16),
-            "_focusrect" => Some(17),
-            "_soundbuftime" => Some(18),
-            "_quality" => Some(19),
-            "_xmouse" => Some(20),
-            "_ymouse" => Some(21),
-            _ => None,
-        };
+    fn dot(&mut self, can_assign: bool, is_delete: bool) -> Result<(), CompileError> {
+        let name = self
+            .expect(TokenKind::Identifier, "Expected name")?
+            .source
+            .to_owned();
 
-        if let Some(property) = property {
+        if is_delete && Precedence::from(self.peek_token().kind) < Precedence::Call {
+            self.push(swf::avm1::types::Value::Str(name.as_str().into()));
+            self.write_action(swf::avm1::types::Action::Delete);
+        } else if let Some(property) = property_index(&name) {
             self.push(swf::avm1::types::Value::Int(property));
 
             if can_assign && self.consume(TokenKind::Equal)? {
@@ -201,7 +191,6 @@ impl<'a> Compiler<'a> {
                 self.write_action(swf::avm1::types::Action::GetProperty);
             }
         } else {
-            let name = name.source.to_owned();
             self.push(swf::avm1::types::Value::Str(name.as_str().into()));
 
             if can_assign && self.consume(TokenKind::Equal)? {
@@ -215,15 +204,32 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn member_access(&mut self, can_assign: bool) -> Result<(), CompileError> {
+    fn member_access(&mut self, can_assign: bool, is_delete: bool) -> Result<(), CompileError> {
         self.expression()?;
         self.expect(TokenKind::RightSquareBrace, "Expected ']'")?;
 
-        if can_assign && self.consume(TokenKind::Equal)? {
+        if is_delete && Precedence::from(self.peek_token().kind) < Precedence::Call {
+            self.write_action(swf::avm1::types::Action::Delete);
+        } else if can_assign && self.consume(TokenKind::Equal)? {
             self.expression()?;
             self.write_action(swf::avm1::types::Action::SetMember);
         } else {
             self.write_action(swf::avm1::types::Action::GetMember);
+        }
+
+        Ok(())
+    }
+
+    fn delete(&mut self) -> Result<(), CompileError> {
+        self.expression_with_precedence(Precedence::Primary)?;
+
+        while Precedence::from(self.peek_token().kind) >= Precedence::Call {
+            let token = self.read_token()?;
+            match token.kind {
+                TokenKind::Dot => self.dot(false, true)?,
+                TokenKind::LeftSquareBrace => self.member_access(false, true)?,
+                _ => unreachable!(),
+            }
         }
 
         Ok(())
@@ -280,7 +286,7 @@ impl<'a> Compiler<'a> {
             Precedence::Term => Precedence::Factor,
             Precedence::Factor => Precedence::Unary,
             Precedence::Unary => Precedence::Call,
-            Precedence::Call => Precedence::Primary,
+            Precedence::Call => unreachable!(),
         };
         self.expression_with_precedence(next_precedence)?;
 
@@ -353,11 +359,13 @@ impl<'a> Compiler<'a> {
 
     fn expression_with_precedence(&mut self, precedence: Precedence) -> Result<(), CompileError> {
         let can_assign = precedence <= Precedence::Assignment;
+        let is_delete = precedence == Precedence::Primary;
 
         let token = self.read_token()?;
         match token.kind {
             TokenKind::LeftParen => self.grouping()?,
             TokenKind::LeftSquareBrace => self.array()?,
+            TokenKind::Delete => self.delete()?,
             token_kind @ (TokenKind::Plus
             | TokenKind::Minus
             | TokenKind::Tilda
@@ -389,7 +397,7 @@ impl<'a> Compiler<'a> {
                 "stopAllSounds" => self.builtin(swf::avm1::types::Action::StopSounds, 0)?,
                 variable_name => {
                     let variable_name = variable_name.to_owned();
-                    self.variable_access(can_assign, &variable_name)?
+                    self.variable_access(&variable_name, can_assign, is_delete)?
                 }
             },
             TokenKind::Eof => {
@@ -410,8 +418,8 @@ impl<'a> Compiler<'a> {
 
         while Precedence::from(self.peek_token().kind) >= precedence {
             match self.read_token()?.kind {
-                TokenKind::Dot => self.dot(can_assign)?,
-                TokenKind::LeftSquareBrace => self.member_access(can_assign)?,
+                TokenKind::Dot => self.dot(can_assign, false)?,
+                TokenKind::LeftSquareBrace => self.member_access(can_assign, false)?,
                 token_kind => self.binary(token_kind)?,
             }
         }
