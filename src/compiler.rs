@@ -49,6 +49,34 @@ impl From<TokenKind> for Precedence {
     }
 }
 
+fn property_index(name: &str) -> Option<i32> {
+    match name {
+        "_x" => Some(0),
+        "_y" => Some(1),
+        "_xscale" => Some(2),
+        "_yscale" => Some(3),
+        "_currentframe" => Some(4),
+        "_totalframes" => Some(5),
+        "_alpha" => Some(6),
+        "_visible" => Some(7),
+        "_width" => Some(8),
+        "_height" => Some(9),
+        "_rotation" => Some(10),
+        "_target" => Some(11),
+        "_framesloaded" => Some(12),
+        "_name" => Some(13),
+        "_droptarget" => Some(14),
+        "_url" => Some(15),
+        "_highquality" => Some(16),
+        "_focusrect" => Some(17),
+        "_soundbuftime" => Some(18),
+        "_quality" => Some(19),
+        "_xmouse" => Some(20),
+        "_ymouse" => Some(21),
+        _ => None,
+    }
+}
+
 struct Compiler<'a> {
     scanner: Scanner<'a>,
     current: Token<'a>,
