@@ -253,6 +253,19 @@ impl<'a> Scanner<'a> {
                     }
                     return self.read_token();
                 }
+                Some((_, '*')) => {
+                    self.read_char();
+                    loop {
+                        match self.read_char() {
+                            None | Some('*') => match self.read_char() {
+                                None | Some('/') => break,
+                                _ => {}
+                            },
+                            _ => {}
+                        }
+                    }
+                    return self.read_token();
+                }
                 _ => TokenKind::Slash,
             },
             Some('*') => TokenKind::Star,
