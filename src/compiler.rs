@@ -473,6 +473,7 @@ impl<'a> Compiler<'a> {
             TokenKind::Null => self.push(swf::avm1::types::Value::Null),
             TokenKind::True => self.push(swf::avm1::types::Value::Bool(true)),
             TokenKind::Undefined => self.push(swf::avm1::types::Value::Undefined),
+            TokenKind::Function => self.function_expression()?,
             TokenKind::Identifier => match token.source {
                 "call" => self.builtin(swf::avm1::types::Action::Call, 1)?,
                 "chr" => self.builtin(swf::avm1::types::Action::AsciiToChar, 1)?,
@@ -581,12 +582,7 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn function_declaration(&mut self) -> Result<(), CompileError> {
-        let name = self
-            .expect(TokenKind::Identifier, "Expected function name")?
-            .source
-            .to_owned();
-
+    fn function_body(&mut self) -> Result<(Vec<String>, Vec<u8>), CompileError> {
         let mut params = Vec::new();
         self.expect(TokenKind::LeftParen, "Expected '('")?;
         loop {
@@ -610,9 +606,39 @@ impl<'a> Compiler<'a> {
         self.block_statement()?;
         let actions = std::mem::replace(&mut self.action_data, old_action_data);
 
+        Ok((params, actions))
+    }
+
+    fn function_declaration(&mut self) -> Result<(), CompileError> {
+        let name = self
+            .expect(TokenKind::Identifier, "Expected function name")?
+            .source
+            .to_owned();
+        let (params, actions) = self.function_body()?;
         self.write_action(swf::avm1::types::Action::DefineFunction(
             swf::avm1::types::DefineFunction {
                 name: name.as_str().into(),
+                params: params.iter().map(|p| p.as_str().into()).collect(),
+                actions: &actions,
+            },
+        ));
+        Ok(())
+    }
+
+    fn function_expression(&mut self) -> Result<(), CompileError> {
+        let token = self.peek_token();
+        if token.kind == TokenKind::Identifier {
+            return Err(CompileError {
+                message: "Function expression must be anonymous".to_string(),
+                line: token.line,
+                column: token.column,
+            });
+        }
+
+        let (params, actions) = self.function_body()?;
+        self.write_action(swf::avm1::types::Action::DefineFunction(
+            swf::avm1::types::DefineFunction {
+                name: Default::default(),
                 params: params.iter().map(|p| p.as_str().into()).collect(),
                 actions: &actions,
             },
