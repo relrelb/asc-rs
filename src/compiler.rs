@@ -474,13 +474,26 @@ impl<'a> Compiler<'a> {
             TokenKind::True => self.push(swf::avm1::types::Value::Bool(true)),
             TokenKind::Undefined => self.push(swf::avm1::types::Value::Undefined),
             TokenKind::Identifier => match token.source {
+                "call" => self.builtin(swf::avm1::types::Action::Call, 1)?,
                 "chr" => self.builtin(swf::avm1::types::Action::AsciiToChar, 1)?,
+                "eval" => self.builtin(swf::avm1::types::Action::GetVariable, 1)?,
                 "getTimer" => self.builtin(swf::avm1::types::Action::GetTime, 0)?,
+                "int" => self.builtin(swf::avm1::types::Action::ToInteger, 1)?,
+                "length" => self.builtin(swf::avm1::types::Action::StringLength, 1)?,
+                "mbchr" => self.builtin(swf::avm1::types::Action::MBAsciiToChar, 1)?,
+                "mblength" => self.builtin(swf::avm1::types::Action::MBStringLength, 1)?,
+                "mbord" => self.builtin(swf::avm1::types::Action::MBCharToAscii, 1)?,
+                "mbsubstring" => self.builtin(swf::avm1::types::Action::MBStringExtract, 3)?,
+                "nextFrame" => self.builtin(swf::avm1::types::Action::NextFrame, 0)?,
                 "ord" => self.builtin(swf::avm1::types::Action::CharToAscii, 1)?,
                 "play" => self.builtin(swf::avm1::types::Action::Play, 0)?,
+                "prevFrame" => self.builtin(swf::avm1::types::Action::PreviousFrame, 0)?,
                 "random" => self.builtin(swf::avm1::types::Action::RandomNumber, 1)?,
                 "stop" => self.builtin(swf::avm1::types::Action::Stop, 0)?,
                 "stopAllSounds" => self.builtin(swf::avm1::types::Action::StopSounds, 0)?,
+                "stopDrag" => self.builtin(swf::avm1::types::Action::EndDrag, 0)?,
+                "targetPath" => self.builtin(swf::avm1::types::Action::TargetPath, 1)?,
+                "toggleHighQuality" => self.builtin(swf::avm1::types::Action::ToggleQuality, 0)?,
                 variable_name => {
                     let variable_name = variable_name.to_owned();
                     self.variable_access(&variable_name, can_assign, is_delete)?;
