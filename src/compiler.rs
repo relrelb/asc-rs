@@ -77,6 +77,10 @@ fn property_index(name: &str) -> Option<i32> {
     }
 }
 
+fn register_index(name: &str) -> Option<u8> {
+    name.strip_prefix("register").and_then(|r| r.parse().ok())
+}
+
 struct Compiler<'a> {
     scanner: Scanner<'a>,
     current: Token<'a>,
@@ -176,23 +180,63 @@ impl<'a> Compiler<'a> {
         can_assign: bool,
         is_delete: bool,
     ) -> Result<(), CompileError> {
-        self.push(swf::avm1::types::Value::Str(name.into()));
+        let register = register_index(name);
+
+        if register.is_none() {
+            self.push(swf::avm1::types::Value::Str(name.into()));
+        }
 
         if is_delete && Precedence::from(self.peek_token().kind) < Precedence::Call {
+            if register.is_some() {
+                let token = self.peek_token();
+                return Err(CompileError {
+                    message: "Cannot delete register".to_string(),
+                    line: token.line,
+                    column: token.column,
+                });
+            }
             self.write_action(swf::avm1::types::Action::Delete2);
         } else if can_assign && self.consume(TokenKind::Equal)? {
             self.expression()?;
-            self.write_action(swf::avm1::types::Action::SetVariable);
+            if let Some(register) = register {
+                self.write_action(swf::avm1::types::Action::StoreRegister(
+                    swf::avm1::types::StoreRegister { register },
+                ));
+            } else {
+                self.write_action(swf::avm1::types::Action::SetVariable);
+            }
         } else if self.consume(TokenKind::DoublePlus)? {
-            self.push(swf::avm1::types::Value::Str(name.into()));
-            self.write_action(swf::avm1::types::Action::GetVariable);
+            if let Some(register) = register {
+                self.push(swf::avm1::types::Value::Register(register));
+            } else {
+                self.push(swf::avm1::types::Value::Str(name.into()));
+                self.write_action(swf::avm1::types::Action::GetVariable);
+            }
             self.write_action(swf::avm1::types::Action::Increment);
-            self.write_action(swf::avm1::types::Action::SetVariable);
+            if let Some(register) = register {
+                self.write_action(swf::avm1::types::Action::StoreRegister(
+                    swf::avm1::types::StoreRegister { register },
+                ));
+            } else {
+                self.write_action(swf::avm1::types::Action::SetVariable);
+            }
         } else if self.consume(TokenKind::DoubleMinus)? {
-            self.push(swf::avm1::types::Value::Str(name.into()));
-            self.write_action(swf::avm1::types::Action::GetVariable);
+            if let Some(register) = register {
+                self.push(swf::avm1::types::Value::Register(register));
+            } else {
+                self.push(swf::avm1::types::Value::Str(name.into()));
+                self.write_action(swf::avm1::types::Action::GetVariable);
+            }
             self.write_action(swf::avm1::types::Action::Decrement);
-            self.write_action(swf::avm1::types::Action::SetVariable);
+            if let Some(register) = register {
+                self.write_action(swf::avm1::types::Action::StoreRegister(
+                    swf::avm1::types::StoreRegister { register },
+                ));
+            } else {
+                self.write_action(swf::avm1::types::Action::SetVariable);
+            }
+        } else if let Some(register) = register {
+            self.push(swf::avm1::types::Value::Register(register));
         } else {
             self.write_action(swf::avm1::types::Action::GetVariable);
         }
@@ -287,16 +331,30 @@ impl<'a> Compiler<'a> {
 
     fn prefix(&mut self, token_kind: TokenKind) -> Result<(), CompileError> {
         let variable = self.expect(TokenKind::Identifier, "Expected variable")?;
-        let name = variable.source.to_owned();
-        self.push(swf::avm1::types::Value::Str(name.as_str().into()));
-        self.push(swf::avm1::types::Value::Str(name.as_str().into()));
-        self.write_action(swf::avm1::types::Action::GetVariable);
+        let register = register_index(variable.source);
+
+        if let Some(register) = register {
+            self.push(swf::avm1::types::Value::Register(register));
+        } else {
+            let name = variable.source.to_owned();
+            self.push(swf::avm1::types::Value::Str(name.as_str().into()));
+            self.push(swf::avm1::types::Value::Str(name.as_str().into()));
+            self.write_action(swf::avm1::types::Action::GetVariable);
+        }
+
         match token_kind {
             TokenKind::DoublePlus => self.write_action(swf::avm1::types::Action::Increment),
             TokenKind::DoubleMinus => self.write_action(swf::avm1::types::Action::Decrement),
             _ => unreachable!(),
         }
-        self.write_action(swf::avm1::types::Action::SetVariable);
+
+        if let Some(register) = register {
+            self.write_action(swf::avm1::types::Action::StoreRegister(
+                swf::avm1::types::StoreRegister { register },
+            ));
+        } else {
+            self.write_action(swf::avm1::types::Action::SetVariable);
+        }
 
         Ok(())
     }
