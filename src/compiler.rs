@@ -581,6 +581,45 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
+    fn function_declaration(&mut self) -> Result<(), CompileError> {
+        let name = self
+            .expect(TokenKind::Identifier, "Expected function name")?
+            .source
+            .to_owned();
+
+        let mut params = Vec::new();
+        self.expect(TokenKind::LeftParen, "Expected '('")?;
+        loop {
+            if self.consume(TokenKind::RightParen)? {
+                break;
+            }
+            params.push(
+                self.expect(TokenKind::Identifier, "Expected parameter name")?
+                    .source
+                    .to_owned(),
+            );
+            if !self.consume(TokenKind::Comma)? {
+                self.expect(TokenKind::RightParen, "Expected ')'")?;
+                break;
+            }
+        }
+
+        self.expect(TokenKind::LeftBrace, "Expected '{'")?;
+        let actions = Vec::new();
+        let old_action_data = std::mem::replace(&mut self.action_data, actions);
+        self.block_statement()?;
+        let actions = std::mem::replace(&mut self.action_data, old_action_data);
+
+        self.write_action(swf::avm1::types::Action::DefineFunction(
+            swf::avm1::types::DefineFunction {
+                name: name.as_str().into(),
+                params: params.iter().map(|p| p.as_str().into()).collect(),
+                actions: &actions,
+            },
+        ));
+        Ok(())
+    }
+
     fn expression_statement(&mut self) -> Result<(), CompileError> {
         self.expression()?;
         self.expect(TokenKind::Semicolon, "Expected ';' after statement")?;
@@ -675,6 +714,8 @@ impl<'a> Compiler<'a> {
     fn declaration(&mut self) -> Result<(), CompileError> {
         if self.consume(TokenKind::Var)? {
             self.variable_declaration()
+        } else if self.consume(TokenKind::Function)? {
+            self.function_declaration()
         } else {
             self.statement()
         }
