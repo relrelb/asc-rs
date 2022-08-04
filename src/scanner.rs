@@ -243,7 +243,18 @@ impl<'a> Scanner<'a> {
                 _ => TokenKind::Plus,
             },
             Some(';') => TokenKind::Semicolon,
-            Some('/') => TokenKind::Slash,
+            Some('/') => match self.chars.peek() {
+                Some((_, '/')) => {
+                    loop {
+                        match self.read_char() {
+                            None | Some('\n') => break,
+                            _ => {}
+                        }
+                    }
+                    return self.read_token();
+                }
+                _ => TokenKind::Slash,
+            },
             Some('*') => TokenKind::Star,
             Some('~') => TokenKind::Tilda,
             Some('0'..='9') => self.read_number()?,
