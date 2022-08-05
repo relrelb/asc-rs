@@ -19,32 +19,28 @@ enum Precedence {
     Primary,
 }
 
-impl From<TokenKind> for Precedence {
-    fn from(kind: TokenKind) -> Self {
-        match kind {
-            TokenKind::Dot | TokenKind::LeftSquareBrace => Self::Call,
-            TokenKind::Bang
-            | TokenKind::Delete
-            | TokenKind::Tilda
-            | TokenKind::Throw
-            | TokenKind::Typeof => Self::Unary,
-            TokenKind::Star | TokenKind::Slash | TokenKind::Percent => Self::Factor,
-            TokenKind::Plus | TokenKind::Minus => Self::Term,
-            TokenKind::DoubleGreater | TokenKind::TripleGreater | TokenKind::DoubleLess => {
-                Self::BitwiseShift
+impl TokenKind {
+    fn precedence(&self) -> Precedence {
+        match self {
+            Self::Dot | Self::LeftSquareBrace => Precedence::Call,
+            Self::Bang | Self::Delete | Self::Tilda | Self::Throw | Self::Typeof => {
+                Precedence::Unary
             }
-            TokenKind::Greater
-            | TokenKind::GreaterEqual
-            | TokenKind::Less
-            | TokenKind::LessEqual
-            | TokenKind::InstanceOf => Self::Comparison,
-            TokenKind::BangEqual | TokenKind::DoubleEqual | TokenKind::TripleEqual => {
-                Self::Equality
+            Self::Star | Self::Slash | Self::Percent => Precedence::Factor,
+            Self::Plus | Self::Minus => Precedence::Term,
+            Self::DoubleGreater | Self::TripleGreater | Self::DoubleLess => {
+                Precedence::BitwiseShift
             }
-            TokenKind::Ampersand => Self::BitwiseAnd,
-            TokenKind::Caret => Self::BitwiseXor,
-            TokenKind::Bar => Self::BitwiseOr,
-            _ => Self::None,
+            Self::Greater
+            | Self::GreaterEqual
+            | Self::Less
+            | Self::LessEqual
+            | Self::InstanceOf => Precedence::Comparison,
+            Self::BangEqual | Self::DoubleEqual | Self::TripleEqual => Precedence::Equality,
+            Self::Ampersand => Precedence::BitwiseAnd,
+            Self::Caret => Precedence::BitwiseXor,
+            Self::Bar => Precedence::BitwiseOr,
+            _ => Precedence::None,
         }
     }
 }
@@ -186,7 +182,7 @@ impl<'a> Compiler<'a> {
             self.push(swf::avm1::types::Value::Str(name.into()));
         }
 
-        if is_delete && Precedence::from(self.peek_token().kind) < Precedence::Call {
+        if is_delete && self.peek_token().kind.precedence() < Precedence::Call {
             if register.is_some() {
                 let token = self.peek_token();
                 return Err(CompileError {
@@ -250,7 +246,7 @@ impl<'a> Compiler<'a> {
             .source
             .to_owned();
 
-        if is_delete && Precedence::from(self.peek_token().kind) < Precedence::Call {
+        if is_delete && self.peek_token().kind.precedence() < Precedence::Call {
             self.push(swf::avm1::types::Value::Str(name.as_str().into()));
             self.write_action(swf::avm1::types::Action::Delete);
         } else if let Some(property) = property_index(&name) {
@@ -280,7 +276,7 @@ impl<'a> Compiler<'a> {
         self.expression()?;
         self.expect(TokenKind::RightSquareBrace, "Expected ']'")?;
 
-        if is_delete && Precedence::from(self.peek_token().kind) < Precedence::Call {
+        if is_delete && self.peek_token().kind.precedence() < Precedence::Call {
             self.write_action(swf::avm1::types::Action::Delete);
         } else if can_assign && self.consume(TokenKind::Equal)? {
             self.expression()?;
@@ -295,7 +291,7 @@ impl<'a> Compiler<'a> {
     fn delete(&mut self) -> Result<(), CompileError> {
         self.expression_with_precedence(Precedence::Primary)?;
 
-        while Precedence::from(self.peek_token().kind) >= Precedence::Call {
+        while self.peek_token().kind.precedence() >= Precedence::Call {
             let token = self.read_token()?;
             match token.kind {
                 TokenKind::Dot => self.dot(false, true)?,
@@ -360,7 +356,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn binary(&mut self, token_kind: TokenKind) -> Result<(), CompileError> {
-        let next_precedence = match Precedence::from(token_kind) {
+        let next_precedence = match token_kind.precedence() {
             Precedence::None | Precedence::Primary => unreachable!(),
             Precedence::Assignment => Precedence::BitwiseOr,
             Precedence::BitwiseOr => Precedence::BitwiseXor,
@@ -520,7 +516,7 @@ impl<'a> Compiler<'a> {
             }
         }
 
-        while Precedence::from(self.peek_token().kind) >= precedence {
+        while self.peek_token().kind.precedence() >= precedence {
             match self.read_token()?.kind {
                 TokenKind::Dot => self.dot(can_assign, false)?,
                 TokenKind::LeftSquareBrace => self.member_access(can_assign, false)?,
@@ -541,7 +537,7 @@ impl<'a> Compiler<'a> {
 
         if is_delete {
             let token = self.peek_token();
-            if Precedence::from(token.kind) < Precedence::Call {
+            if token.kind.precedence() < Precedence::Call {
                 return Err(CompileError {
                     message: "Invalid delete target".to_string(),
                     line: token.line,
