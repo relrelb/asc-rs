@@ -4,38 +4,49 @@ use std::str::CharIndices;
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum TokenKind {
     // Operators.
-    LeftParen,        // (
-    RightParen,       // )
-    LeftBrace,        // }
-    RightBrace,       // {
-    LeftSquareBrace,  // [
-    RightSquareBrace, // ]
-    Ampersand,        // &
-    Bang,             // !
-    Bar,              // |
-    BangEqual,        // !=
-    Caret,            // ^
-    Comma,            // ,
-    Dot,              // .
-    Equal,            // =
-    DoubleEqual,      // ==
-    TripleEqual,      // ===
-    Greater,          // >
-    DoubleGreater,    // >>
-    TripleGreater,    // >>>
-    GreaterEqual,     // >=
-    Less,             // <
-    DoubleLess,       // <<
-    LessEqual,        // <=
-    Minus,            // -
-    DoubleMinus,      // --
-    Percent,          // %
-    Plus,             // +
-    DoublePlus,       // ++
-    Semicolon,        // ;
-    Slash,            // /
-    Star,             // *
-    Tilda,            // ~
+    LeftParen,          // (
+    RightParen,         // )
+    LeftBrace,          // }
+    RightBrace,         // {
+    LeftSquareBrace,    // [
+    RightSquareBrace,   // ]
+    Ampersand,          // &
+    AmpersandEqual,     // &=
+    Bang,               // !
+    Bar,                // |
+    BarEqual,           // |=
+    BangEqual,          // !=
+    Caret,              // ^
+    CaretEqual,         // ^=
+    Comma,              // ,
+    Dot,                // .
+    Equal,              // =
+    DoubleEqual,        // ==
+    TripleEqual,        // ===
+    Greater,            // >
+    DoubleGreater,      // >>
+    DoubleGreaterEqual, // >>=
+    TripleGreater,      // >>>
+    TripleGreaterEqual, // >>>=
+    GreaterEqual,       // >=
+    Less,               // <
+    LessEqual,          // <=
+    DoubleLess,         // <<
+    DoubleLessEqual,    // <<=
+    Minus,              // -
+    MinusEqual,         // -=
+    DoubleMinus,        // --
+    Percent,            // %
+    PercentEqual,       // %=
+    Plus,               // +
+    PlusEqual,          // +=
+    DoublePlus,         // ++
+    Semicolon,          // ;
+    Slash,              // /
+    SlashEqual,         // /=
+    Star,               // *
+    StarEqual,          // *=
+    Tilda,              // ~
 
     // Literals.
     False,
@@ -175,7 +186,13 @@ impl<'a> Scanner<'a> {
             Some('}') => TokenKind::RightBrace,
             Some('[') => TokenKind::LeftSquareBrace,
             Some(']') => TokenKind::RightSquareBrace,
-            Some('&') => TokenKind::Ampersand,
+            Some('&') => match self.chars.peek() {
+                Some((_, '=')) => {
+                    self.read_char();
+                    TokenKind::AmpersandEqual
+                }
+                _ => TokenKind::Ampersand,
+            },
             Some('!') => match self.chars.peek() {
                 Some((_, '=')) => {
                     self.read_char();
@@ -183,8 +200,20 @@ impl<'a> Scanner<'a> {
                 }
                 _ => TokenKind::Bang,
             },
-            Some('|') => TokenKind::Bar,
-            Some('^') => TokenKind::Caret,
+            Some('|') => match self.chars.peek() {
+                Some((_, '=')) => {
+                    self.read_char();
+                    TokenKind::BarEqual
+                }
+                _ => TokenKind::Bar,
+            },
+            Some('^') => match self.chars.peek() {
+                Some((_, '=')) => {
+                    self.read_char();
+                    TokenKind::CaretEqual
+                }
+                _ => TokenKind::Caret,
+            },
             Some(',') => TokenKind::Comma,
             Some('.') => TokenKind::Dot,
             Some('=') => match self.chars.peek() {
@@ -208,9 +237,19 @@ impl<'a> Scanner<'a> {
                 Some((_, '>')) => {
                     self.read_char();
                     match self.chars.peek() {
+                        Some((_, '=')) => {
+                            self.read_char();
+                            TokenKind::DoubleGreaterEqual
+                        }
                         Some((_, '>')) => {
                             self.read_char();
-                            TokenKind::TripleGreater
+                            match self.chars.peek() {
+                                Some((_, '=')) => {
+                                    self.read_char();
+                                    TokenKind::TripleGreaterEqual
+                                }
+                                _ => TokenKind::TripleGreater,
+                            }
                         }
                         _ => TokenKind::DoubleGreater,
                     }
@@ -224,19 +263,39 @@ impl<'a> Scanner<'a> {
                 }
                 Some((_, '<')) => {
                     self.read_char();
-                    TokenKind::DoubleLess
+                    match self.chars.peek() {
+                        Some((_, '=')) => {
+                            self.read_char();
+                            TokenKind::DoubleLessEqual
+                        }
+                        _ => TokenKind::DoubleLess,
+                    }
                 }
                 _ => TokenKind::Less,
             },
             Some('-') => match self.chars.peek() {
+                Some((_, '=')) => {
+                    self.read_char();
+                    TokenKind::MinusEqual
+                }
                 Some((_, '-')) => {
                     self.read_char();
                     TokenKind::DoubleMinus
                 }
                 _ => TokenKind::Minus,
             },
-            Some('%') => TokenKind::Percent,
+            Some('%') => match self.chars.peek() {
+                Some((_, '=')) => {
+                    self.read_char();
+                    TokenKind::PercentEqual
+                }
+                _ => TokenKind::Percent,
+            },
             Some('+') => match self.chars.peek() {
+                Some((_, '=')) => {
+                    self.read_char();
+                    TokenKind::PlusEqual
+                }
                 Some((_, '+')) => {
                     self.read_char();
                     TokenKind::DoublePlus
@@ -267,9 +326,19 @@ impl<'a> Scanner<'a> {
                     }
                     return self.read_token();
                 }
+                Some((_, '=')) => {
+                    self.read_char();
+                    TokenKind::SlashEqual
+                }
                 _ => TokenKind::Slash,
             },
-            Some('*') => TokenKind::Star,
+            Some('*') => match self.chars.peek() {
+                Some((_, '=')) => {
+                    self.read_char();
+                    TokenKind::StarEqual
+                }
+                _ => TokenKind::Star,
+            },
             Some('~') => TokenKind::Tilda,
             Some('0'..='9') => self.read_number()?,
             Some(quote @ ('"' | '\'')) => self.read_string(quote)?,

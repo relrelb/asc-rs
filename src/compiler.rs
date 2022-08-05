@@ -43,6 +43,24 @@ impl TokenKind {
             _ => Precedence::None,
         }
     }
+
+    fn is_assign(&self) -> bool {
+        matches!(
+            self,
+            Self::Equal
+                | Self::PlusEqual
+                | Self::MinusEqual
+                | Self::StarEqual
+                | Self::SlashEqual
+                | Self::PercentEqual
+                | Self::AmpersandEqual
+                | Self::BarEqual
+                | Self::CaretEqual
+                | Self::DoubleGreaterEqual
+                | Self::TripleGreaterEqual
+                | Self::DoubleLessEqual
+        )
+    }
 }
 
 fn property_index(name: &str) -> Option<i32> {
@@ -258,8 +276,38 @@ impl<'a> Compiler<'a> {
             }
 
             self.write_action(swf::avm1::types::Action::Delete2);
-        } else if can_assign && self.consume(TokenKind::Equal)? {
+        } else if can_assign && self.peek_token().kind.is_assign() {
+            let token_kind = self.read_token()?.kind;
+            if token_kind != TokenKind::Equal {
+                if let Some(register) = register {
+                    self.push(swf::avm1::types::Value::Register(register));
+                } else {
+                    self.push(swf::avm1::types::Value::Str(name.into()));
+                    self.write_action(swf::avm1::types::Action::GetVariable);
+                }
+            }
             self.expression()?;
+            match token_kind {
+                TokenKind::Equal => {}
+                TokenKind::PlusEqual => self.write_action(swf::avm1::types::Action::Add2),
+                TokenKind::MinusEqual => self.write_action(swf::avm1::types::Action::Subtract),
+                TokenKind::StarEqual => self.write_action(swf::avm1::types::Action::Multiply),
+                TokenKind::SlashEqual => self.write_action(swf::avm1::types::Action::Divide),
+                TokenKind::PercentEqual => self.write_action(swf::avm1::types::Action::Modulo),
+                TokenKind::AmpersandEqual => self.write_action(swf::avm1::types::Action::BitAnd),
+                TokenKind::BarEqual => self.write_action(swf::avm1::types::Action::BitOr),
+                TokenKind::CaretEqual => self.write_action(swf::avm1::types::Action::BitXor),
+                TokenKind::DoubleGreaterEqual => {
+                    self.write_action(swf::avm1::types::Action::BitRShift)
+                }
+                TokenKind::TripleGreaterEqual => {
+                    self.write_action(swf::avm1::types::Action::BitURShift)
+                }
+                TokenKind::DoubleLessEqual => {
+                    self.write_action(swf::avm1::types::Action::BitLShift)
+                }
+                _ => unreachable!(),
+            }
             if let Some(register) = register {
                 self.write_action(swf::avm1::types::Action::StoreRegister(
                     swf::avm1::types::StoreRegister { register },
