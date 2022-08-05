@@ -22,7 +22,7 @@ enum Precedence {
 impl TokenKind {
     fn precedence(&self) -> Precedence {
         match self {
-            Self::Dot | Self::LeftSquareBrace => Precedence::Call,
+            Self::LeftParen | Self::Dot | Self::LeftSquareBrace => Precedence::Call,
             Self::Bang | Self::Delete | Self::Tilda | Self::Throw | Self::Typeof => {
                 Precedence::Unary
             }
@@ -144,28 +144,56 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn array(&mut self) -> Result<(), CompileError> {
-        let mut elements = Vec::new();
-        loop {
-            if self.consume(TokenKind::RightSquareBrace)? {
-                break;
+    fn comma_separated(
+        &mut self,
+        terminator: TokenKind,
+        count: usize,
+    ) -> Result<usize, CompileError> {
+        let mut values = Vec::new();
+        let token = loop {
+            let token = self.peek_token();
+            if token.kind == terminator {
+                break self.read_token()?;
             }
-            let element = Vec::new();
-            let old_action_data = std::mem::replace(&mut self.action_data, element);
+
+            if values.len() >= count {
+                return Err(CompileError {
+                    message: format!("Expected {} argument(s), got {}", count, values.len() + 1),
+                    line: token.line,
+                    column: token.column,
+                });
+            }
+
+            let value_data = Vec::new();
+            let old_action_data = std::mem::replace(&mut self.action_data, value_data);
             self.expression()?;
-            let element = std::mem::replace(&mut self.action_data, old_action_data);
-            elements.push(element);
+            let value_data = std::mem::replace(&mut self.action_data, old_action_data);
+            values.push(value_data);
+
             if !self.consume(TokenKind::Comma)? {
-                self.expect(TokenKind::RightSquareBrace, "Expected ']' after array")?;
-                break;
+                // TODO: Print exact character.
+                break self.expect(terminator, "Expected end of values")?;
             }
+        };
+
+        if count < usize::MAX && values.len() < count {
+            return Err(CompileError {
+                message: format!("Expected {} argument(s), got {}", count, values.len()),
+                line: token.line,
+                column: token.column,
+            });
         }
-        for element in elements.iter().rev() {
-            self.action_data.extend(element);
+
+        for value_data in values.iter().rev() {
+            self.action_data.extend(value_data);
         }
-        self.push(swf::avm1::types::Value::Int(
-            elements.len().try_into().unwrap(),
-        ));
+
+        Ok(values.len())
+    }
+
+    fn array(&mut self) -> Result<(), CompileError> {
+        let count = self.comma_separated(TokenKind::RightSquareBrace, usize::MAX)?;
+        self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
         self.write_action(swf::avm1::types::Action::InitArray);
         Ok(())
     }
@@ -178,12 +206,31 @@ impl<'a> Compiler<'a> {
     ) -> Result<(), CompileError> {
         let register = register_index(name);
 
+        if self.consume(TokenKind::LeftParen)? {
+            if register.is_some() {
+                // TODO: Tell exact location.
+                let token = self.peek_token();
+                return Err(CompileError {
+                    message: "Cannot call register".to_string(),
+                    line: token.line,
+                    column: token.column,
+                });
+            }
+
+            let count = self.comma_separated(TokenKind::RightParen, usize::MAX)?;
+            self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
+            self.push(swf::avm1::types::Value::Str(name.into()));
+            self.write_action(swf::avm1::types::Action::CallFunction);
+            return Ok(());
+        }
+
         if register.is_none() {
             self.push(swf::avm1::types::Value::Str(name.into()));
         }
 
         if is_delete && self.peek_token().kind.precedence() < Precedence::Call {
             if register.is_some() {
+                // TODO: Tell exact location.
                 let token = self.peek_token();
                 return Err(CompileError {
                     message: "Cannot delete register".to_string(),
@@ -191,6 +238,7 @@ impl<'a> Compiler<'a> {
                     column: token.column,
                 });
             }
+
             self.write_action(swf::avm1::types::Action::Delete2);
         } else if can_assign && self.consume(TokenKind::Equal)? {
             self.expression()?;
@@ -409,32 +457,7 @@ impl<'a> Compiler<'a> {
         arity: usize,
     ) -> Result<(), CompileError> {
         self.expect(TokenKind::LeftParen, "Expected '('")?;
-        let mut count = 0;
-        let token = loop {
-            let token = self.peek_token();
-            if token.kind == TokenKind::RightParen {
-                break self.read_token()?;
-            }
-            count += 1;
-            if count > arity {
-                return Err(CompileError {
-                    message: format!("Expected {} argument(s), got {}", arity, count),
-                    line: token.line,
-                    column: token.column,
-                });
-            }
-            self.expression()?;
-            if !self.consume(TokenKind::Comma)? {
-                break self.expect(TokenKind::RightParen, "Expected ')'")?;
-            }
-        };
-        if count < arity {
-            return Err(CompileError {
-                message: format!("Expected {} argument(s), got {}", arity, count),
-                line: token.line,
-                column: token.column,
-            });
-        }
+        self.comma_separated(TokenKind::RightParen, arity)?;
         self.write_action(action);
         Ok(())
     }
