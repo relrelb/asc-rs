@@ -144,24 +144,49 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn comma_separated(
-        &mut self,
-        terminator: TokenKind,
-        count: usize,
-    ) -> Result<usize, CompileError> {
-        let mut values = Vec::new();
+    fn comma_separated(&mut self, terminator: TokenKind, arity: usize) -> Result<(), CompileError> {
+        let mut count = 0;
         let token = loop {
             let token = self.peek_token();
             if token.kind == terminator {
                 break self.read_token()?;
             }
 
-            if values.len() >= count {
+            count += 1;
+            if count > arity {
                 return Err(CompileError {
-                    message: format!("Expected {} argument(s), got {}", count, values.len() + 1),
+                    message: format!("Expected {} argument(s), got {}", arity, count),
                     line: token.line,
                     column: token.column,
                 });
+            }
+
+            self.expression()?;
+
+            if !self.consume(TokenKind::Comma)? {
+                // TODO: Print exact character.
+                break self.expect(terminator, "Expected end of values")?;
+            }
+        };
+
+        if count < arity {
+            return Err(CompileError {
+                message: format!("Expected {} argument(s), got {}", arity, count),
+                line: token.line,
+                column: token.column,
+            });
+        }
+
+        Ok(())
+    }
+
+    fn comma_separated_rev(&mut self, terminator: TokenKind) -> Result<usize, CompileError> {
+        let mut values = Vec::new();
+        loop {
+            let token = self.peek_token();
+            if token.kind == terminator {
+                self.read_token()?;
+                break;
             }
 
             let value_data = Vec::new();
@@ -172,16 +197,9 @@ impl<'a> Compiler<'a> {
 
             if !self.consume(TokenKind::Comma)? {
                 // TODO: Print exact character.
-                break self.expect(terminator, "Expected end of values")?;
+                self.expect(terminator, "Expected end of values")?;
+                break;
             }
-        };
-
-        if count < usize::MAX && values.len() < count {
-            return Err(CompileError {
-                message: format!("Expected {} argument(s), got {}", count, values.len()),
-                line: token.line,
-                column: token.column,
-            });
         }
 
         for value_data in values.iter().rev() {
@@ -192,7 +210,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn array(&mut self) -> Result<(), CompileError> {
-        let count = self.comma_separated(TokenKind::RightSquareBrace, usize::MAX)?;
+        let count = self.comma_separated_rev(TokenKind::RightSquareBrace)?;
         self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
         self.write_action(swf::avm1::types::Action::InitArray);
         Ok(())
@@ -217,7 +235,7 @@ impl<'a> Compiler<'a> {
                 });
             }
 
-            let count = self.comma_separated(TokenKind::RightParen, usize::MAX)?;
+            let count = self.comma_separated_rev(TokenKind::RightParen)?;
             self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
             self.push(swf::avm1::types::Value::Str(name.into()));
             self.write_action(swf::avm1::types::Action::CallFunction);
@@ -495,6 +513,7 @@ impl<'a> Compiler<'a> {
             TokenKind::Function => self.function_expression()?,
             TokenKind::Identifier => match token.source {
                 "call" => self.builtin(swf::avm1::types::Action::Call, 1)?,
+                "duplicateMovieClip" => self.builtin(swf::avm1::types::Action::CloneSprite, 3)?,
                 "chr" => self.builtin(swf::avm1::types::Action::AsciiToChar, 1)?,
                 "eval" => self.builtin(swf::avm1::types::Action::GetVariable, 1)?,
                 "getTimer" => self.builtin(swf::avm1::types::Action::GetTime, 0)?,
