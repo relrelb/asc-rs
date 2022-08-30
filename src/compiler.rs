@@ -234,57 +234,20 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn variable_access(
+    fn access(
         &mut self,
-        name: &str,
+        push: impl Fn(&mut Self),
+        duplicate: impl Fn(&mut Self),
+        get: impl Fn(&mut Self),
+        set: impl Fn(&mut Self),
         can_assign: bool,
-        is_delete: bool,
     ) -> Result<(), CompileError> {
-        let register = register_index(name);
-
-        if self.consume(TokenKind::LeftParen)? {
-            if register.is_some() {
-                // TODO: Tell exact location.
-                let token = self.peek_token();
-                return Err(CompileError {
-                    message: "Cannot call register".to_string(),
-                    line: token.line,
-                    column: token.column,
-                });
-            }
-
-            let count = self.comma_separated_rev(TokenKind::RightParen)?;
-            self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
-            self.push(swf::avm1::types::Value::Str(name.into()));
-            self.write_action(swf::avm1::types::Action::CallFunction);
-            return Ok(());
-        }
-
-        if register.is_none() {
-            self.push(swf::avm1::types::Value::Str(name.into()));
-        }
-
-        if is_delete && self.peek_token().kind.precedence() < Precedence::Call {
-            if register.is_some() {
-                // TODO: Tell exact location.
-                let token = self.peek_token();
-                return Err(CompileError {
-                    message: "Cannot delete register".to_string(),
-                    line: token.line,
-                    column: token.column,
-                });
-            }
-
-            self.write_action(swf::avm1::types::Action::Delete2);
-        } else if can_assign && self.peek_token().kind.is_assign() {
+        if can_assign && self.peek_token().kind.is_assign() {
             let token_kind = self.read_token()?.kind;
             if token_kind != TokenKind::Equal {
-                if let Some(register) = register {
-                    self.push(swf::avm1::types::Value::Register(register));
-                } else {
-                    self.push(swf::avm1::types::Value::Str(name.into()));
-                    self.write_action(swf::avm1::types::Action::GetVariable);
-                }
+                duplicate(self);
+                push(self);
+                get(self);
             }
             self.expression()?;
             match token_kind {
@@ -308,47 +271,79 @@ impl<'a> Compiler<'a> {
                 }
                 _ => unreachable!(),
             }
-            if let Some(register) = register {
-                self.write_action(swf::avm1::types::Action::StoreRegister(
-                    swf::avm1::types::StoreRegister { register },
-                ));
-            } else {
-                self.write_action(swf::avm1::types::Action::SetVariable);
-            }
+            set(self);
         } else if self.consume(TokenKind::DoublePlus)? {
-            if let Some(register) = register {
-                self.push(swf::avm1::types::Value::Register(register));
-            } else {
-                self.push(swf::avm1::types::Value::Str(name.into()));
-                self.write_action(swf::avm1::types::Action::GetVariable);
-            }
+            duplicate(self);
+            push(self);
+            get(self);
             self.write_action(swf::avm1::types::Action::Increment);
-            if let Some(register) = register {
-                self.write_action(swf::avm1::types::Action::StoreRegister(
-                    swf::avm1::types::StoreRegister { register },
-                ));
-            } else {
-                self.write_action(swf::avm1::types::Action::SetVariable);
-            }
+            set(self);
         } else if self.consume(TokenKind::DoubleMinus)? {
-            if let Some(register) = register {
-                self.push(swf::avm1::types::Value::Register(register));
-            } else {
-                self.push(swf::avm1::types::Value::Str(name.into()));
-                self.write_action(swf::avm1::types::Action::GetVariable);
-            }
+            duplicate(self);
+            push(self);
+            get(self);
             self.write_action(swf::avm1::types::Action::Decrement);
-            if let Some(register) = register {
-                self.write_action(swf::avm1::types::Action::StoreRegister(
-                    swf::avm1::types::StoreRegister { register },
-                ));
-            } else {
-                self.write_action(swf::avm1::types::Action::SetVariable);
-            }
-        } else if let Some(register) = register {
-            self.push(swf::avm1::types::Value::Register(register));
+            set(self);
         } else {
-            self.write_action(swf::avm1::types::Action::GetVariable);
+            push(self);
+            get(self);
+        }
+        Ok(())
+    }
+
+    fn variable_access(
+        &mut self,
+        name: &str,
+        can_assign: bool,
+        is_delete: bool,
+    ) -> Result<(), CompileError> {
+        let register = register_index(name);
+
+        if self.consume(TokenKind::LeftParen)? {
+            if register.is_some() {
+                // TODO: Tell exact location.
+                let token = self.peek_token();
+                return Err(CompileError {
+                    message: "Cannot call register".to_string(),
+                    line: token.line,
+                    column: token.column,
+                });
+            }
+
+            let count = self.comma_separated_rev(TokenKind::RightParen)?;
+            self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
+            self.push(swf::avm1::types::Value::Str(name.into()));
+            self.write_action(swf::avm1::types::Action::CallFunction);
+        } else if is_delete && self.peek_token().kind.precedence() < Precedence::Call {
+            if register.is_some() {
+                // TODO: Tell exact location.
+                let token = self.peek_token();
+                return Err(CompileError {
+                    message: "Cannot delete register".to_string(),
+                    line: token.line,
+                    column: token.column,
+                });
+            }
+
+            self.push(swf::avm1::types::Value::Str(name.into()));
+            self.write_action(swf::avm1::types::Action::Delete2);
+        } else {
+            let push = |this: &mut Self| match register {
+                Some(_) => {}
+                None => this.push(swf::avm1::types::Value::Str(name.into())),
+            };
+            let duplicate = push;
+            let get = |this: &mut Self| match register {
+                Some(register) => this.push(swf::avm1::types::Value::Register(register)),
+                None => this.write_action(swf::avm1::types::Action::GetVariable),
+            };
+            let set = |this: &mut Self| match register {
+                Some(register) => this.write_action(swf::avm1::types::Action::StoreRegister(
+                    swf::avm1::types::StoreRegister { register },
+                )),
+                None => this.write_action(swf::avm1::types::Action::SetVariable),
+            };
+            self.access(push, duplicate, get, set, can_assign)?;
         }
 
         Ok(())
@@ -361,26 +356,29 @@ impl<'a> Compiler<'a> {
             .to_owned();
 
         if is_delete && self.peek_token().kind.precedence() < Precedence::Call {
+            // TODO: Error when deleting a property?
             self.push(swf::avm1::types::Value::Str(name.as_str().into()));
             self.write_action(swf::avm1::types::Action::Delete);
-        } else if let Some(property) = property_index(&name) {
-            self.push(swf::avm1::types::Value::Int(property));
-
-            if can_assign && self.consume(TokenKind::Equal)? {
-                self.expression()?;
-                self.write_action(swf::avm1::types::Action::SetProperty);
-            } else {
-                self.write_action(swf::avm1::types::Action::GetProperty);
-            }
         } else {
-            self.push(swf::avm1::types::Value::Str(name.as_str().into()));
-
-            if can_assign && self.consume(TokenKind::Equal)? {
-                self.expression()?;
-                self.write_action(swf::avm1::types::Action::SetMember);
-            } else {
-                self.write_action(swf::avm1::types::Action::GetMember);
-            }
+            let property = property_index(&name);
+            let push = |this: &mut Self| match property {
+                Some(property) => this.push(swf::avm1::types::Value::Int(property)),
+                None => this.push(swf::avm1::types::Value::Str(name.as_str().into())),
+            };
+            let duplicate = |this: &mut Self| {
+                this.write_action(swf::avm1::types::Action::PushDuplicate);
+                push(this);
+                this.write_action(swf::avm1::types::Action::StackSwap);
+            };
+            let get = |this: &mut Self| match property {
+                Some(_) => this.write_action(swf::avm1::types::Action::GetProperty),
+                None => this.write_action(swf::avm1::types::Action::GetMember),
+            };
+            let set = |this: &mut Self| match property {
+                Some(_) => this.write_action(swf::avm1::types::Action::SetProperty),
+                None => this.write_action(swf::avm1::types::Action::SetMember),
+            };
+            self.access(push, duplicate, get, set, can_assign)?;
         }
 
         Ok(())
@@ -392,11 +390,17 @@ impl<'a> Compiler<'a> {
 
         if is_delete && self.peek_token().kind.precedence() < Precedence::Call {
             self.write_action(swf::avm1::types::Action::Delete);
-        } else if can_assign && self.consume(TokenKind::Equal)? {
-            self.expression()?;
-            self.write_action(swf::avm1::types::Action::SetMember);
         } else {
-            self.write_action(swf::avm1::types::Action::GetMember);
+            // TODO: Fix.
+            let push = |_this: &mut Self| {};
+            let duplicate = |this: &mut Self| {
+                this.write_action(swf::avm1::types::Action::StackSwap);
+                this.write_action(swf::avm1::types::Action::PushDuplicate);
+                this.write_action(swf::avm1::types::Action::StackSwap);
+            };
+            let get = |this: &mut Self| this.write_action(swf::avm1::types::Action::GetMember);
+            let set = |this: &mut Self| this.write_action(swf::avm1::types::Action::SetMember);
+            self.access(push, duplicate, get, set, can_assign)?;
         }
 
         Ok(())
