@@ -813,6 +813,59 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
+    fn try_statement(&mut self) -> Result<(), CompileError> {
+        self.expect(TokenKind::LeftBrace, "Expected '{'")?;
+        let try_body = Vec::new();
+        let old_action_data = std::mem::replace(&mut self.action_data, try_body);
+        self.block_statement()?;
+        let try_body = std::mem::replace(&mut self.action_data, old_action_data);
+
+        let catch_body = if self.consume(TokenKind::Catch)? {
+            self.expect(TokenKind::LeftParen, "Expected '('")?;
+            let catch_var = self
+                .expect(TokenKind::Identifier, "Expected catch variable")?
+                .source
+                .to_owned();
+            self.expect(TokenKind::RightParen, "Expected ')'")?;
+
+            self.expect(TokenKind::LeftBrace, "Expected '{'")?;
+            let catch_body = Vec::new();
+            let old_action_data = std::mem::replace(&mut self.action_data, catch_body);
+            self.block_statement()?;
+            let catch_body = std::mem::replace(&mut self.action_data, old_action_data);
+            Some((catch_var, catch_body))
+        } else {
+            None
+        };
+
+        let finally_body = if self.consume(TokenKind::Finally)? {
+            self.expect(TokenKind::LeftBrace, "Expected '{'")?;
+            let finally_body = Vec::new();
+            let old_action_data = std::mem::replace(&mut self.action_data, finally_body);
+            self.block_statement()?;
+            let finally_body = std::mem::replace(&mut self.action_data, old_action_data);
+            Some(finally_body)
+        } else {
+            None
+        };
+
+        // TODO: Validate existence of catch/finally?
+
+        self.write_action(swf::avm1::types::Action::Try(swf::avm1::types::Try {
+            try_body: &try_body,
+            catch_body: catch_body.as_ref().map(|(catch_var, catch_body)| {
+                let catch_var = if let Some(register) = register_index(&catch_var) {
+                    swf::avm1::types::CatchVar::Register(register)
+                } else {
+                    swf::avm1::types::CatchVar::Var(catch_var.as_str().into())
+                };
+                (catch_var, catch_body.as_ref())
+            }),
+            finally_body: finally_body.as_deref(),
+        }));
+        Ok(())
+    }
+
     fn statement(&mut self) -> Result<(), CompileError> {
         if self.consume(TokenKind::LeftBrace)? {
             self.block_statement()
@@ -820,6 +873,8 @@ impl<'a> Compiler<'a> {
             self.if_statement()
         } else if self.consume(TokenKind::While)? {
             self.while_statement()
+        } else if self.consume(TokenKind::Try)? {
+            self.try_statement()
         } else if self.consume(TokenKind::Trace)? {
             self.trace_statement()
         } else {
