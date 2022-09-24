@@ -174,13 +174,19 @@ impl<'a> Scanner<'a> {
     }
 
     pub fn read_token(&mut self) -> Result<Token<'a>, CompileError> {
+        let previous_line = self.line;
+        let previous_column = self.column;
         self.skip_spaces();
-        let line = self.line;
-        let column = self.column;
+        let mut line = self.line;
+        let mut column = self.column;
         let c = self.read_char();
         let start = self.offset;
         let kind = match c {
-            None => TokenKind::Eof,
+            None => {
+                line = previous_line;
+                column = previous_column;
+                TokenKind::Eof
+            }
             Some('(') => TokenKind::LeftParen,
             Some(')') => TokenKind::RightParen,
             Some('{') => TokenKind::LeftBrace,
