@@ -130,12 +130,9 @@ impl<'a> Scanner<'a> {
         Some(c)
     }
 
-    fn read_char_skip_spaces(&mut self) -> Option<char> {
-        loop {
-            let c = self.read_char()?;
-            if !c.is_ascii_whitespace() {
-                return Some(c);
-            }
+    fn skip_spaces(&mut self) {
+        while matches!(self.chars.peek(), Some((_, c)) if c.is_ascii_whitespace()) {
+            self.read_char();
         }
     }
 
@@ -177,10 +174,11 @@ impl<'a> Scanner<'a> {
     }
 
     pub fn read_token(&mut self) -> Result<Token<'a>, CompileError> {
-        let c = self.read_char_skip_spaces();
-        let start = self.offset;
+        self.skip_spaces();
         let line = self.line;
-        let column = self.column - 1;
+        let column = self.column;
+        let c = self.read_char();
+        let start = self.offset;
         let kind = match c {
             None => TokenKind::Eof,
             Some('(') => TokenKind::LeftParen,
