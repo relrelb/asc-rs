@@ -115,13 +115,13 @@ impl<'a> Compiler<'a> {
         writer.write_action(&action).unwrap();
     }
 
-    fn read_token(&mut self) -> Result<Token, CompileError> {
+    fn read_token(&mut self) -> Result<Token<'a>, CompileError> {
         let next_token = self.scanner.read_token()?;
         let token = std::mem::replace(&mut self.current, next_token);
         Ok(token)
     }
 
-    fn peek_token(&self) -> &Token {
+    fn peek_token(&self) -> &Token<'a> {
         &self.current
     }
 
@@ -135,7 +135,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn expect(&mut self, kind: TokenKind, message: &str) -> Result<Token, CompileError> {
+    fn expect(&mut self, kind: TokenKind, message: &str) -> Result<Token<'a>, CompileError> {
         let token = self.peek_token();
         if token.kind == kind {
             self.read_token()
@@ -473,8 +473,8 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn binary(&mut self, token_kind: TokenKind) -> Result<(), CompileError> {
-        let next_precedence = match token_kind.precedence() {
+    fn binary(&mut self, token: Token) -> Result<(), CompileError> {
+        let next_precedence = match token.kind.precedence() {
             Precedence::None | Precedence::Primary => unreachable!(),
             Precedence::Assignment => Precedence::BitwiseOr,
             Precedence::BitwiseOr => Precedence::BitwiseXor,
@@ -485,12 +485,17 @@ impl<'a> Compiler<'a> {
             Precedence::BitwiseShift => Precedence::Term,
             Precedence::Term => Precedence::Factor,
             Precedence::Factor => Precedence::Unary,
-            Precedence::Unary => Precedence::Call,
-            Precedence::Call => unreachable!(),
+            Precedence::Unary | Precedence::Call => {
+                return Err(CompileError {
+                    message: "Expected binary operator".to_string(),
+                    line: token.line,
+                    column: token.column,
+                })
+            }
         };
         self.expression_with_precedence(next_precedence)?;
 
-        match token_kind {
+        match token.kind {
             TokenKind::Ampersand => self.write_action(swf::avm1::types::Action::BitAnd),
             TokenKind::Bar => self.write_action(swf::avm1::types::Action::BitOr),
             TokenKind::Caret => self.write_action(swf::avm1::types::Action::BitXor),
@@ -611,10 +616,11 @@ impl<'a> Compiler<'a> {
         }
 
         while self.peek_token().kind.precedence() >= precedence {
-            match self.read_token()?.kind {
+            let token = self.read_token()?;
+            match token.kind {
                 TokenKind::Dot => self.dot(can_assign, false)?,
                 TokenKind::LeftSquareBrace => self.member_access(can_assign, false)?,
-                token_kind => self.binary(token_kind)?,
+                _ => self.binary(token)?,
             }
         }
 
