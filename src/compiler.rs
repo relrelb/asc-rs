@@ -546,15 +546,13 @@ impl<'a> Compiler<'a> {
             TokenKind::LeftParen => self.grouping()?,
             TokenKind::LeftSquareBrace => self.array()?,
             TokenKind::Delete => self.delete()?,
-            token_kind @ (TokenKind::Plus
+            TokenKind::Plus
             | TokenKind::Minus
             | TokenKind::Tilda
             | TokenKind::Bang
             | TokenKind::Throw
-            | TokenKind::Typeof) => self.unary(token_kind)?,
-            token_kind @ (TokenKind::DoublePlus | TokenKind::DoubleMinus) => {
-                self.prefix(token_kind)?
-            }
+            | TokenKind::Typeof => self.unary(token.kind)?,
+            TokenKind::DoublePlus | TokenKind::DoubleMinus => self.prefix(token.kind)?,
             TokenKind::Number => {
                 let i = token.source.parse().unwrap();
                 self.push(swf::avm1::types::Value::Int(i));
