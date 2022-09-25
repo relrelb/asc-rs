@@ -243,14 +243,14 @@ impl<'a> Compiler<'a> {
         can_assign: bool,
     ) -> Result<(), CompileError> {
         if can_assign && self.peek_token().kind.is_assign() {
-            let token_kind = self.read_token()?.kind;
-            if token_kind != TokenKind::Equal {
+            let token = self.read_token()?;
+            if token.kind != TokenKind::Equal {
                 duplicate(self);
                 push(self);
                 get(self);
             }
             self.expression()?;
-            match token_kind {
+            match token.kind {
                 TokenKind::Equal => {}
                 TokenKind::PlusEqual => self.write_action(swf::avm1::types::Action::Add2),
                 TokenKind::MinusEqual => self.write_action(swf::avm1::types::Action::Subtract),
@@ -350,20 +350,17 @@ impl<'a> Compiler<'a> {
     }
 
     fn dot(&mut self, can_assign: bool, is_delete: bool) -> Result<(), CompileError> {
-        let name = self
-            .expect(TokenKind::Identifier, "Expected name")?
-            .source
-            .to_owned();
+        let name = self.expect(TokenKind::Identifier, "Expected name")?;
 
         if is_delete && self.peek_token().kind.precedence() < Precedence::Call {
             // TODO: Error when deleting a property?
-            self.push(swf::avm1::types::Value::Str(name.as_str().into()));
+            self.push(swf::avm1::types::Value::Str(name.source.into()));
             self.write_action(swf::avm1::types::Action::Delete);
         } else {
-            let property = property_index(&name);
+            let property = property_index(name.source);
             let push = |this: &mut Self| match property {
                 Some(property) => this.push(swf::avm1::types::Value::Int(property)),
-                None => this.push(swf::avm1::types::Value::Str(name.as_str().into())),
+                None => this.push(swf::avm1::types::Value::Str(name.source.into())),
             };
             let duplicate = |this: &mut Self| {
                 this.write_action(swf::avm1::types::Action::PushDuplicate);
@@ -450,9 +447,8 @@ impl<'a> Compiler<'a> {
         if let Some(register) = register {
             self.push(swf::avm1::types::Value::Register(register));
         } else {
-            let name = variable.source.to_owned();
-            self.push(swf::avm1::types::Value::Str(name.as_str().into()));
-            self.push(swf::avm1::types::Value::Str(name.as_str().into()));
+            self.push(swf::avm1::types::Value::Str(variable.source.into()));
+            self.push(swf::avm1::types::Value::Str(variable.source.into()));
             self.write_action(swf::avm1::types::Action::GetVariable);
         }
 
@@ -554,12 +550,12 @@ impl<'a> Compiler<'a> {
             | TokenKind::Typeof => self.unary(token.kind)?,
             TokenKind::DoublePlus | TokenKind::DoubleMinus => self.prefix(token.kind)?,
             TokenKind::Number => {
-                let i = token.source.parse().unwrap();
-                self.push(swf::avm1::types::Value::Int(i));
+                let integer = token.source.parse().unwrap();
+                self.push(swf::avm1::types::Value::Int(integer));
             }
             TokenKind::String => {
-                let s = token.source[1..token.source.len() - 1].to_owned();
-                self.push(swf::avm1::types::Value::Str(s.as_str().into()));
+                let string = &token.source[1..token.source.len() - 1];
+                self.push(swf::avm1::types::Value::Str(string.into()));
             }
             TokenKind::False => self.push(swf::avm1::types::Value::Bool(false)),
             TokenKind::Null => self.push(swf::avm1::types::Value::Null),
@@ -589,8 +585,7 @@ impl<'a> Compiler<'a> {
                 "targetPath" => self.builtin(swf::avm1::types::Action::TargetPath, 1)?,
                 "toggleHighQuality" => self.builtin(swf::avm1::types::Action::ToggleQuality, 0)?,
                 variable_name => {
-                    let variable_name = variable_name.to_owned();
-                    self.variable_access(&variable_name, can_assign, is_delete)?;
+                    self.variable_access(variable_name, can_assign, is_delete)?;
                     if is_delete {
                         // Skip invalid delete target check.
                         return Ok(());
@@ -661,11 +656,8 @@ impl<'a> Compiler<'a> {
     }
 
     fn variable_declaration(&mut self) -> Result<(), CompileError> {
-        let name = self
-            .expect(TokenKind::Identifier, "Expected variable name")?
-            .source
-            .to_owned();
-        self.push(swf::avm1::types::Value::Str(name.as_str().into()));
+        let variable = self.expect(TokenKind::Identifier, "Expected variable name")?;
+        self.push(swf::avm1::types::Value::Str(variable.source.into()));
         if self.consume(TokenKind::Equal)? {
             self.expression()?;
             self.write_action(swf::avm1::types::Action::DefineLocal);
@@ -676,18 +668,15 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
-    fn function_body(&mut self) -> Result<(Vec<String>, Vec<u8>), CompileError> {
+    fn function_body(&mut self, name: &str) -> Result<(), CompileError> {
         let mut params = Vec::new();
         self.expect(TokenKind::LeftParen, "Expected '('")?;
         loop {
             if self.consume(TokenKind::RightParen)? {
                 break;
             }
-            params.push(
-                self.expect(TokenKind::Identifier, "Expected parameter name")?
-                    .source
-                    .to_owned(),
-            );
+            let parameter = self.expect(TokenKind::Identifier, "Expected parameter name")?;
+            params.push(parameter.source.into());
             if !self.consume(TokenKind::Comma)? {
                 self.expect(TokenKind::RightParen, "Expected ')'")?;
                 break;
@@ -700,23 +689,19 @@ impl<'a> Compiler<'a> {
         self.block_statement()?;
         let actions = std::mem::replace(&mut self.action_data, old_action_data);
 
-        Ok((params, actions))
-    }
-
-    fn function_declaration(&mut self) -> Result<(), CompileError> {
-        let name = self
-            .expect(TokenKind::Identifier, "Expected function name")?
-            .source
-            .to_owned();
-        let (params, actions) = self.function_body()?;
         self.write_action(swf::avm1::types::Action::DefineFunction(
             swf::avm1::types::DefineFunction {
-                name: name.as_str().into(),
-                params: params.iter().map(|p| p.as_str().into()).collect(),
+                name: name.into(),
+                params,
                 actions: &actions,
             },
         ));
         Ok(())
+    }
+
+    fn function_declaration(&mut self) -> Result<(), CompileError> {
+        let name = self.expect(TokenKind::Identifier, "Expected function name")?;
+        self.function_body(name.source)
     }
 
     fn function_expression(&mut self) -> Result<(), CompileError> {
@@ -728,16 +713,7 @@ impl<'a> Compiler<'a> {
                 column: token.column,
             });
         }
-
-        let (params, actions) = self.function_body()?;
-        self.write_action(swf::avm1::types::Action::DefineFunction(
-            swf::avm1::types::DefineFunction {
-                name: Default::default(),
-                params: params.iter().map(|p| p.as_str().into()).collect(),
-                actions: &actions,
-            },
-        ));
-        Ok(())
+        self.function_body("")
     }
 
     fn expression_statement(&mut self) -> Result<(), CompileError> {
@@ -826,10 +802,7 @@ impl<'a> Compiler<'a> {
 
         let catch_body = if self.consume(TokenKind::Catch)? {
             self.expect(TokenKind::LeftParen, "Expected '('")?;
-            let catch_var = self
-                .expect(TokenKind::Identifier, "Expected catch variable")?
-                .source
-                .to_owned();
+            let catch_var = self.expect(TokenKind::Identifier, "Expected catch variable")?;
             self.expect(TokenKind::RightParen, "Expected ')'")?;
 
             self.expect(TokenKind::LeftBrace, "Expected '{'")?;
@@ -858,10 +831,10 @@ impl<'a> Compiler<'a> {
         self.write_action(swf::avm1::types::Action::Try(swf::avm1::types::Try {
             try_body: &try_body,
             catch_body: catch_body.as_ref().map(|(catch_var, catch_body)| {
-                let catch_var = if let Some(register) = register_index(&catch_var) {
+                let catch_var = if let Some(register) = register_index(catch_var.source) {
                     swf::avm1::types::CatchVar::Register(register)
                 } else {
-                    swf::avm1::types::CatchVar::Var(catch_var.as_str().into())
+                    swf::avm1::types::CatchVar::Var(catch_var.source.into())
                 };
                 (catch_var, catch_body.as_ref())
             }),
