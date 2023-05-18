@@ -95,19 +95,40 @@ fn register_index(name: &str) -> Option<u8> {
     name.strip_prefix("register").and_then(|r| r.parse().ok())
 }
 
-struct Compiler<'a> {
+struct CompilerState<'a> {
     scanner: Scanner<'a>,
     current: Token<'a>,
-    action_data: Vec<u8>,
 }
 
-impl<'a> Compiler<'a> {
+impl<'a> CompilerState<'a> {
     fn new(source: &'a str) -> Self {
         Self {
             scanner: Scanner::new(source),
             current: Token::INVALID,
+        }
+    }
+}
+
+struct Compiler<'a, 'b> {
+    state: &'b mut CompilerState<'a>,
+    action_data: Vec<u8>,
+}
+
+impl<'a, 'b> Compiler<'a, 'b> {
+    fn new(state: &'b mut CompilerState<'a>) -> Self {
+        Self {
+            state,
             action_data: Vec::new(),
         }
+    }
+
+    fn nested<'c>(
+        &'c mut self,
+        f: impl FnOnce(&mut Compiler<'a, 'c>) -> Result<(), CompileError>,
+    ) -> Result<Vec<u8>, CompileError> {
+        let mut compiler = Compiler::new(self.state);
+        f(&mut compiler)?;
+        Ok(compiler.action_data)
     }
 
     fn write_action(&mut self, action: swf::avm1::types::Action) {
@@ -116,13 +137,13 @@ impl<'a> Compiler<'a> {
     }
 
     fn read_token(&mut self) -> Result<Token<'a>, CompileError> {
-        let next_token = self.scanner.read_token()?;
-        let token = std::mem::replace(&mut self.current, next_token);
+        let next_token = self.state.scanner.read_token()?;
+        let token = std::mem::replace(&mut self.state.current, next_token);
         Ok(token)
     }
 
     fn peek_token(&self) -> &Token<'a> {
-        &self.current
+        &self.state.current
     }
 
     fn consume(&mut self, kind: TokenKind) -> Result<bool, CompileError> {
@@ -207,11 +228,7 @@ impl<'a> Compiler<'a> {
                 break;
             }
 
-            let value_data = Vec::new();
-            let old_action_data = std::mem::replace(&mut self.action_data, value_data);
-            self.expression()?;
-            let value_data = std::mem::replace(&mut self.action_data, old_action_data);
-            values.push(value_data);
+            values.push(self.nested(Compiler::expression)?);
 
             if !self.consume(TokenKind::Comma)? {
                 // TODO: Print exact character.
@@ -220,11 +237,11 @@ impl<'a> Compiler<'a> {
             }
         }
 
-        for value_data in values.iter().rev() {
+        let count = values.len();
+        for value_data in values.into_iter().rev() {
             self.action_data.extend(value_data);
         }
-
-        Ok(values.len())
+        Ok(count)
     }
 
     fn array(&mut self) -> Result<(), CompileError> {
@@ -397,6 +414,7 @@ impl<'a> Compiler<'a> {
             };
             let get = |this: &mut Self| this.write_action(swf::avm1::types::Action::GetMember);
             let set = |this: &mut Self| this.write_action(swf::avm1::types::Action::SetMember);
+
             self.access(push, duplicate, get, set, can_assign)?;
         }
 
@@ -684,11 +702,7 @@ impl<'a> Compiler<'a> {
         }
 
         self.expect(TokenKind::LeftBrace, "Expected '{'")?;
-        let actions = Vec::new();
-        let old_action_data = std::mem::replace(&mut self.action_data, actions);
-        self.block_statement()?;
-        let actions = std::mem::replace(&mut self.action_data, old_action_data);
-
+        let actions = self.nested(Compiler::block_statement)?;
         self.write_action(swf::avm1::types::Action::DefineFunction(
             swf::avm1::types::DefineFunction {
                 name: name.into(),
@@ -741,64 +755,48 @@ impl<'a> Compiler<'a> {
         self.expect(TokenKind::RightParen, "Expected ')' after condition")?;
         self.write_action(swf::avm1::types::Action::Not);
 
-        let if_body = Vec::new();
-        let old_action_data = std::mem::replace(&mut self.action_data, if_body);
-        self.statement()?;
-
-        let mut else_body = Vec::new();
-        if self.consume(TokenKind::Else)? {
-            let if_body = std::mem::replace(&mut self.action_data, else_body);
-            self.statement()?;
-            else_body = std::mem::replace(&mut self.action_data, if_body);
-
-            self.write_action(swf::avm1::types::Action::Jump(swf::avm1::types::Jump {
-                offset: else_body.len().try_into().unwrap(),
-            }));
-        }
-
-        let if_body = std::mem::replace(&mut self.action_data, old_action_data);
+        let if_body = self.nested(Compiler::statement)?;
         self.write_action(swf::avm1::types::Action::If(swf::avm1::types::If {
             offset: if_body.len().try_into().unwrap(),
         }));
         self.action_data.extend(if_body);
-        self.action_data.extend(else_body);
+
+        if self.consume(TokenKind::Else)? {
+            let else_body = self.nested(Compiler::statement)?;
+            self.write_action(swf::avm1::types::Action::Jump(swf::avm1::types::Jump {
+                offset: else_body.len().try_into().unwrap(),
+            }));
+            self.action_data.extend(else_body);
+        }
 
         Ok(())
     }
 
     fn while_statement(&mut self) -> Result<(), CompileError> {
-        let condition = Vec::new();
-        let old_action_data = std::mem::replace(&mut self.action_data, condition);
         self.expect(TokenKind::LeftParen, "Expected '(' after while")?;
-        self.expression()?;
+        let condition = self.nested(Compiler::expression)?;
         self.expect(TokenKind::RightParen, "Expected ')' after condition")?;
-        self.write_action(swf::avm1::types::Action::Not);
 
-        let body = Vec::new();
-        let condition = std::mem::replace(&mut self.action_data, body);
-        self.statement()?;
-        let body = &self.action_data;
+        let body = self.nested(Compiler::statement)?;
         const JUMP_SIZE: usize = 5;
-        self.write_action(swf::avm1::types::Action::Jump(swf::avm1::types::Jump {
-            offset: -i16::try_from(condition.len() + body.len() + JUMP_SIZE * 2).unwrap(),
-        }));
+        let offset = body.len() + JUMP_SIZE * 2;
 
-        let body = std::mem::replace(&mut self.action_data, old_action_data);
-        self.action_data.extend(condition);
+        self.write_action(swf::avm1::types::Action::Not);
+        self.action_data.extend(&condition);
         self.write_action(swf::avm1::types::Action::If(swf::avm1::types::If {
-            offset: body.len().try_into().unwrap(),
+            offset: offset.try_into().unwrap(),
         }));
         self.action_data.extend(body);
+        self.write_action(swf::avm1::types::Action::Jump(swf::avm1::types::Jump {
+            offset: -i16::try_from(condition.len() + offset).unwrap(),
+        }));
 
         Ok(())
     }
 
     fn try_statement(&mut self) -> Result<(), CompileError> {
         self.expect(TokenKind::LeftBrace, "Expected '{'")?;
-        let try_body = Vec::new();
-        let old_action_data = std::mem::replace(&mut self.action_data, try_body);
-        self.block_statement()?;
-        let try_body = std::mem::replace(&mut self.action_data, old_action_data);
+        let try_body = self.nested(Compiler::block_statement)?;
 
         let catch_body = if self.consume(TokenKind::Catch)? {
             self.expect(TokenKind::LeftParen, "Expected '('")?;
@@ -806,10 +804,8 @@ impl<'a> Compiler<'a> {
             self.expect(TokenKind::RightParen, "Expected ')'")?;
 
             self.expect(TokenKind::LeftBrace, "Expected '{'")?;
-            let catch_body = Vec::new();
-            let old_action_data = std::mem::replace(&mut self.action_data, catch_body);
-            self.block_statement()?;
-            let catch_body = std::mem::replace(&mut self.action_data, old_action_data);
+            let catch_body = self.nested(Compiler::block_statement)?;
+
             Some((catch_var, catch_body))
         } else {
             None
@@ -817,11 +813,7 @@ impl<'a> Compiler<'a> {
 
         let finally_body = if self.consume(TokenKind::Finally)? {
             self.expect(TokenKind::LeftBrace, "Expected '{'")?;
-            let finally_body = Vec::new();
-            let old_action_data = std::mem::replace(&mut self.action_data, finally_body);
-            self.block_statement()?;
-            let finally_body = std::mem::replace(&mut self.action_data, old_action_data);
-            Some(finally_body)
+            Some(self.nested(Compiler::block_statement)?)
         } else {
             None
         };
@@ -882,7 +874,8 @@ impl<'a> Compiler<'a> {
 }
 
 pub fn compile<W: std::io::Write>(source: &str, output: W) -> Result<(), CompileError> {
-    let mut compiler = Compiler::new(source);
+    let mut state = CompilerState::new(source);
+    let mut compiler = Compiler::new(&mut state);
     compiler.compile()?;
 
     const SWF_VERSION: u8 = 32;
