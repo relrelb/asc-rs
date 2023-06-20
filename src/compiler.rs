@@ -450,6 +450,16 @@ impl<'a, 'b> Compiler<'a, 'b> {
         Ok(())
     }
 
+    fn construct(&mut self) -> Result<(), CompileError> {
+        let constructor = self.expect(TokenKind::Identifier, "Expected constructor name")?;
+        self.expect(TokenKind::LeftParen, "Expected '(' after constructor name")?;
+        let count = self.comma_separated_rev(|c| c.expression(), TokenKind::RightParen)?;
+        self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
+        self.push(swf::avm1::types::Value::Str(constructor.source.into()));
+        self.write_action(swf::avm1::types::Action::NewObject);
+        Ok(())
+    }
+
     fn delete(&mut self) -> Result<(), CompileError> {
         self.expression_with_precedence(Precedence::Primary)?;
 
@@ -589,6 +599,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
             TokenKind::LeftParen => self.grouping()?,
             TokenKind::LeftSquareBrace => self.array()?,
             TokenKind::LeftBrace => self.object()?,
+            TokenKind::New => self.construct()?,
             TokenKind::Delete => self.delete()?,
             TokenKind::Plus
             | TokenKind::Minus
