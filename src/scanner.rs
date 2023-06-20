@@ -6,8 +6,8 @@ pub enum TokenKind {
     // Operators.
     LeftParen,          // (
     RightParen,         // )
-    LeftBrace,          // }
-    RightBrace,         // {
+    LeftBrace,          // {
+    RightBrace,         // }
     LeftSquareBrace,    // [
     RightSquareBrace,   // ]
     Ampersand,          // &
@@ -41,6 +41,7 @@ pub enum TokenKind {
     Plus,               // +
     PlusEqual,          // +=
     DoublePlus,         // ++
+    Colon,              // :
     Semicolon,          // ;
     Slash,              // /
     SlashEqual,         // /=
@@ -309,6 +310,7 @@ impl<'a> Scanner<'a> {
                 }
                 _ => TokenKind::Plus,
             },
+            Some(':') => TokenKind::Colon,
             Some(';') => TokenKind::Semicolon,
             Some('/') => match self.chars.peek() {
                 Some((_, '/')) => {

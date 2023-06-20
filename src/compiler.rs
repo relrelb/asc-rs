@@ -122,9 +122,9 @@ impl<'a, 'b> Compiler<'a, 'b> {
         }
     }
 
-    fn nested<'c>(
-        &'c mut self,
-        f: impl FnOnce(&mut Compiler<'a, 'c>) -> Result<(), CompileError>,
+    fn nested(
+        &mut self,
+        f: impl FnOnce(&mut Compiler<'a, '_>) -> Result<(), CompileError>,
     ) -> Result<Vec<u8>, CompileError> {
         let mut compiler = Compiler::new(self.state);
         f(&mut compiler)?;
@@ -183,7 +183,12 @@ impl<'a, 'b> Compiler<'a, 'b> {
         Ok(())
     }
 
-    fn comma_separated(&mut self, terminator: TokenKind, arity: usize) -> Result<(), CompileError> {
+    fn comma_separated(
+        &mut self,
+        f: impl Fn(&mut Compiler<'a, 'b>) -> Result<(), CompileError>,
+        terminator: TokenKind,
+        arity: Option<usize>,
+    ) -> Result<usize, CompileError> {
         let mut count = 0;
         let token = loop {
             let token = self.peek_token();
@@ -192,15 +197,17 @@ impl<'a, 'b> Compiler<'a, 'b> {
             }
 
             count += 1;
-            if count > arity {
-                return Err(CompileError {
-                    message: format!("Expected {} argument(s), got {}", arity, count),
-                    line: token.line,
-                    column: token.column,
-                });
+            if let Some(arity) = arity {
+                if count > arity {
+                    return Err(CompileError {
+                        message: format!("Expected {} argument(s), got {}", arity, count),
+                        line: token.line,
+                        column: token.column,
+                    });
+                }
             }
 
-            self.expression()?;
+            f(self)?;
 
             if !self.consume(TokenKind::Comma)? {
                 // TODO: Print exact character.
@@ -208,18 +215,24 @@ impl<'a, 'b> Compiler<'a, 'b> {
             }
         };
 
-        if count < arity {
-            return Err(CompileError {
-                message: format!("Expected {} argument(s), got {}", arity, count),
-                line: token.line,
-                column: token.column,
-            });
+        if let Some(arity) = arity {
+            if count < arity {
+                return Err(CompileError {
+                    message: format!("Expected {} argument(s), got {}", arity, count),
+                    line: token.line,
+                    column: token.column,
+                });
+            }
         }
 
-        Ok(())
+        Ok(count)
     }
 
-    fn comma_separated_rev(&mut self, terminator: TokenKind) -> Result<usize, CompileError> {
+    fn comma_separated_rev(
+        &mut self,
+        f: impl Fn(&mut Compiler<'a, '_>) -> Result<(), CompileError>,
+        terminator: TokenKind,
+    ) -> Result<usize, CompileError> {
         let mut values = Vec::new();
         loop {
             let token = self.peek_token();
@@ -228,7 +241,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
                 break;
             }
 
-            values.push(self.nested(Compiler::expression)?);
+            values.push(self.nested(&f)?);
 
             if !self.consume(TokenKind::Comma)? {
                 // TODO: Print exact character.
@@ -245,9 +258,25 @@ impl<'a, 'b> Compiler<'a, 'b> {
     }
 
     fn array(&mut self) -> Result<(), CompileError> {
-        let count = self.comma_separated_rev(TokenKind::RightSquareBrace)?;
+        let count = self.comma_separated_rev(|c| c.expression(), TokenKind::RightSquareBrace)?;
         self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
         self.write_action(swf::avm1::types::Action::InitArray);
+        Ok(())
+    }
+
+    fn object(&mut self) -> Result<(), CompileError> {
+        let count = self.comma_separated(
+            |c| {
+                let name = c.expect(TokenKind::Identifier, "Expected property name")?;
+                c.push(swf::avm1::types::Value::Str(name.source.into()));
+                c.expect(TokenKind::Colon, "Expected ':' after property name")?;
+                c.expression()
+            },
+            TokenKind::RightBrace,
+            None,
+        )?;
+        self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
+        self.write_action(swf::avm1::types::Action::InitObject);
         Ok(())
     }
 
@@ -327,7 +356,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
                 });
             }
 
-            let count = self.comma_separated_rev(TokenKind::RightParen)?;
+            let count = self.comma_separated_rev(|c| c.expression(), TokenKind::RightParen)?;
             self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
             self.push(swf::avm1::types::Value::Str(name.into()));
             self.write_action(swf::avm1::types::Action::CallFunction);
@@ -546,7 +575,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
         arity: usize,
     ) -> Result<(), CompileError> {
         self.expect(TokenKind::LeftParen, "Expected '('")?;
-        self.comma_separated(TokenKind::RightParen, arity)?;
+        self.comma_separated(|c| c.expression(), TokenKind::RightParen, Some(arity))?;
         self.write_action(action);
         Ok(())
     }
@@ -559,6 +588,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
         match token.kind {
             TokenKind::LeftParen => self.grouping()?,
             TokenKind::LeftSquareBrace => self.array()?,
+            TokenKind::LeftBrace => self.object()?,
             TokenKind::Delete => self.delete()?,
             TokenKind::Plus
             | TokenKind::Minus
@@ -702,7 +732,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
         }
 
         self.expect(TokenKind::LeftBrace, "Expected '{'")?;
-        let actions = self.nested(Compiler::block_statement)?;
+        let actions = self.nested(|c| c.block_statement())?;
         self.write_action(swf::avm1::types::Action::DefineFunction(
             swf::avm1::types::DefineFunction {
                 name: name.into(),
@@ -755,14 +785,14 @@ impl<'a, 'b> Compiler<'a, 'b> {
         self.expect(TokenKind::RightParen, "Expected ')' after condition")?;
         self.write_action(swf::avm1::types::Action::Not);
 
-        let if_body = self.nested(Compiler::statement)?;
+        let if_body = self.nested(|c| c.statement())?;
         self.write_action(swf::avm1::types::Action::If(swf::avm1::types::If {
             offset: if_body.len().try_into().unwrap(),
         }));
         self.action_data.extend(if_body);
 
         if self.consume(TokenKind::Else)? {
-            let else_body = self.nested(Compiler::statement)?;
+            let else_body = self.nested(|c| c.statement())?;
             self.write_action(swf::avm1::types::Action::Jump(swf::avm1::types::Jump {
                 offset: else_body.len().try_into().unwrap(),
             }));
@@ -774,10 +804,10 @@ impl<'a, 'b> Compiler<'a, 'b> {
 
     fn while_statement(&mut self) -> Result<(), CompileError> {
         self.expect(TokenKind::LeftParen, "Expected '(' after while")?;
-        let condition = self.nested(Compiler::expression)?;
+        let condition = self.nested(|c| c.expression())?;
         self.expect(TokenKind::RightParen, "Expected ')' after condition")?;
 
-        let body = self.nested(Compiler::statement)?;
+        let body = self.nested(|c| c.statement())?;
         const JUMP_SIZE: usize = 5;
         let offset = body.len() + JUMP_SIZE * 2;
 
@@ -796,7 +826,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
 
     fn try_statement(&mut self) -> Result<(), CompileError> {
         self.expect(TokenKind::LeftBrace, "Expected '{'")?;
-        let try_body = self.nested(Compiler::block_statement)?;
+        let try_body = self.nested(|c| c.block_statement())?;
 
         let catch_body = if self.consume(TokenKind::Catch)? {
             self.expect(TokenKind::LeftParen, "Expected '('")?;
@@ -804,7 +834,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
             self.expect(TokenKind::RightParen, "Expected ')'")?;
 
             self.expect(TokenKind::LeftBrace, "Expected '{'")?;
-            let catch_body = self.nested(Compiler::block_statement)?;
+            let catch_body = self.nested(|c| c.block_statement())?;
 
             Some((catch_var, catch_body))
         } else {
@@ -813,7 +843,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
 
         let finally_body = if self.consume(TokenKind::Finally)? {
             self.expect(TokenKind::LeftBrace, "Expected '{'")?;
-            Some(self.nested(Compiler::block_statement)?)
+            Some(self.nested(|c| c.block_statement())?)
         } else {
             None
         };
