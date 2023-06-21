@@ -400,7 +400,14 @@ impl<'a, 'b> Compiler<'a, 'b> {
     fn dot(&mut self, can_assign: bool, is_delete: bool) -> Result<(), CompileError> {
         let name = self.expect(TokenKind::Identifier, "Expected name")?;
 
-        if is_delete && self.peek_token().kind.precedence() < Precedence::Call {
+        if self.consume(TokenKind::LeftParen)? {
+            // TODO: Error when calling a property?
+            let count = self.comma_separated_rev(|c| c.expression(), TokenKind::RightParen)?;
+            self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
+            self.write_action(swf::avm1::types::Action::StackSwap);
+            self.push(swf::avm1::types::Value::Str(name.source.into()));
+            self.write_action(swf::avm1::types::Action::CallMethod);
+        } else if is_delete && self.peek_token().kind.precedence() < Precedence::Call {
             // TODO: Error when deleting a property?
             self.push(swf::avm1::types::Value::Str(name.source.into()));
             self.write_action(swf::avm1::types::Action::Delete);
