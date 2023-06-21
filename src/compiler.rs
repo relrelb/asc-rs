@@ -437,13 +437,21 @@ impl<'a, 'b> Compiler<'a, 'b> {
     }
 
     fn member_access(&mut self, can_assign: bool, is_delete: bool) -> Result<(), CompileError> {
-        self.expression()?;
+        let name = self.nested(|c| c.expression())?;
         self.expect(TokenKind::RightSquareBrace, "Expected ']'")?;
 
-        if is_delete && self.peek_token().kind.precedence() < Precedence::Call {
+        if self.consume(TokenKind::LeftParen)? {
+            let count = self.comma_separated_rev(|c| c.expression(), TokenKind::RightParen)?;
+            self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
+            self.write_action(swf::avm1::types::Action::StackSwap);
+            self.action_data.extend(name);
+            self.write_action(swf::avm1::types::Action::CallMethod);
+        } else if is_delete && self.peek_token().kind.precedence() < Precedence::Call {
+            self.action_data.extend(name);
             self.write_action(swf::avm1::types::Action::Delete);
         } else {
             // TODO: Fix.
+            self.action_data.extend(name);
             let push = |_this: &mut Self| {};
             let duplicate = |this: &mut Self| {
                 this.write_action(swf::avm1::types::Action::StackSwap);
@@ -452,7 +460,6 @@ impl<'a, 'b> Compiler<'a, 'b> {
             };
             let get = |this: &mut Self| this.write_action(swf::avm1::types::Action::GetMember);
             let set = |this: &mut Self| this.write_action(swf::avm1::types::Action::SetMember);
-
             self.access(push, duplicate, get, set, can_assign)?;
         }
 
