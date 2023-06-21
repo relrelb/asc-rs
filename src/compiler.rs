@@ -290,7 +290,9 @@ impl<'a, 'b> Compiler<'a, 'b> {
     ) -> Result<(), CompileError> {
         if can_assign && self.peek_token().kind.is_assign() {
             let token = self.read_token()?;
-            if token.kind != TokenKind::Equal {
+            if token.kind == TokenKind::Equal {
+                push(self);
+            } else {
                 duplicate(self);
                 push(self);
                 get(self);
