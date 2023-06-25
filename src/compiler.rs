@@ -1,6 +1,6 @@
 use crate::scanner::{CompileError, Scanner, Token, TokenKind};
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum Precedence {
     None,
     Assignment,
@@ -17,6 +17,16 @@ enum Precedence {
     Unary,
     Call,
     Primary,
+}
+
+impl Precedence {
+    fn can_assign(&self) -> bool {
+        *self <= Self::Assignment
+    }
+
+    fn is_delete(&self) -> bool {
+        *self == Self::Primary
+    }
 }
 
 impl TokenKind {
@@ -339,12 +349,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
         Ok(())
     }
 
-    fn variable_access(
-        &mut self,
-        name: &str,
-        can_assign: bool,
-        is_delete: bool,
-    ) -> Result<(), CompileError> {
+    fn variable_access(&mut self, name: &str, precedence: Precedence) -> Result<(), CompileError> {
         let register = register_index(name);
 
         if self.consume(TokenKind::LeftParen)? {
@@ -362,7 +367,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
             self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
             self.push(swf::avm1::types::Value::Str(name.into()));
             self.write_action(swf::avm1::types::Action::CallFunction);
-        } else if is_delete && self.peek_token().kind.precedence() < Precedence::Call {
+        } else if precedence.is_delete() && self.peek_token().kind.precedence() < Precedence::Call {
             if register.is_some() {
                 // TODO: Tell exact location.
                 let token = self.peek_token();
@@ -391,13 +396,13 @@ impl<'a, 'b> Compiler<'a, 'b> {
                 )),
                 None => this.write_action(swf::avm1::types::Action::SetVariable),
             };
-            self.access(push, duplicate, get, set, can_assign)?;
+            self.access(push, duplicate, get, set, precedence.can_assign())?;
         }
 
         Ok(())
     }
 
-    fn dot(&mut self, can_assign: bool, is_delete: bool) -> Result<(), CompileError> {
+    fn dot(&mut self, precedence: Precedence) -> Result<(), CompileError> {
         let name = self.expect(TokenKind::Identifier, "Expected name")?;
 
         if self.consume(TokenKind::LeftParen)? {
@@ -407,7 +412,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
             self.write_action(swf::avm1::types::Action::StackSwap);
             self.push(swf::avm1::types::Value::Str(name.source.into()));
             self.write_action(swf::avm1::types::Action::CallMethod);
-        } else if is_delete && self.peek_token().kind.precedence() < Precedence::Call {
+        } else if precedence.is_delete() && self.peek_token().kind.precedence() < Precedence::Call {
             // TODO: Error when deleting a property?
             self.push(swf::avm1::types::Value::Str(name.source.into()));
             self.write_action(swf::avm1::types::Action::Delete);
@@ -430,13 +435,13 @@ impl<'a, 'b> Compiler<'a, 'b> {
                 Some(_) => this.write_action(swf::avm1::types::Action::SetProperty),
                 None => this.write_action(swf::avm1::types::Action::SetMember),
             };
-            self.access(push, duplicate, get, set, can_assign)?;
+            self.access(push, duplicate, get, set, precedence.can_assign())?;
         }
 
         Ok(())
     }
 
-    fn member_access(&mut self, can_assign: bool, is_delete: bool) -> Result<(), CompileError> {
+    fn member_access(&mut self, precedence: Precedence) -> Result<(), CompileError> {
         let name = self.nested(|c| c.expression())?;
         self.expect(TokenKind::RightSquareBrace, "Expected ']'")?;
 
@@ -446,7 +451,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
             self.write_action(swf::avm1::types::Action::StackSwap);
             self.action_data.extend(name);
             self.write_action(swf::avm1::types::Action::CallMethod);
-        } else if is_delete && self.peek_token().kind.precedence() < Precedence::Call {
+        } else if precedence.is_delete() && self.peek_token().kind.precedence() < Precedence::Call {
             self.action_data.extend(name);
             self.write_action(swf::avm1::types::Action::Delete);
         } else {
@@ -460,7 +465,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
             };
             let get = |this: &mut Self| this.write_action(swf::avm1::types::Action::GetMember);
             let set = |this: &mut Self| this.write_action(swf::avm1::types::Action::SetMember);
-            self.access(push, duplicate, get, set, can_assign)?;
+            self.access(push, duplicate, get, set, precedence.can_assign())?;
         }
 
         Ok(())
@@ -482,8 +487,8 @@ impl<'a, 'b> Compiler<'a, 'b> {
         while self.peek_token().kind.precedence() >= Precedence::Call {
             let token = self.read_token()?;
             match token.kind {
-                TokenKind::Dot => self.dot(false, true)?,
-                TokenKind::LeftSquareBrace => self.member_access(false, true)?,
+                TokenKind::Dot => self.dot(Precedence::Primary)?,
+                TokenKind::LeftSquareBrace => self.member_access(Precedence::Primary)?,
                 _ => unreachable!(),
             }
         }
@@ -607,9 +612,6 @@ impl<'a, 'b> Compiler<'a, 'b> {
     }
 
     fn expression_with_precedence(&mut self, precedence: Precedence) -> Result<(), CompileError> {
-        let can_assign = precedence <= Precedence::Assignment;
-        let is_delete = precedence == Precedence::Primary;
-
         let token = self.read_token()?;
         match token.kind {
             TokenKind::LeftParen => self.grouping()?,
@@ -660,8 +662,8 @@ impl<'a, 'b> Compiler<'a, 'b> {
                 "targetPath" => self.builtin(swf::avm1::types::Action::TargetPath, 1)?,
                 "toggleHighQuality" => self.builtin(swf::avm1::types::Action::ToggleQuality, 0)?,
                 variable_name => {
-                    self.variable_access(variable_name, can_assign, is_delete)?;
-                    if is_delete {
+                    self.variable_access(variable_name, precedence)?;
+                    if precedence.is_delete() {
                         // Skip invalid delete target check.
                         return Ok(());
                     }
@@ -686,13 +688,13 @@ impl<'a, 'b> Compiler<'a, 'b> {
         while self.peek_token().kind.precedence() >= precedence {
             let token = self.read_token()?;
             match token.kind {
-                TokenKind::Dot => self.dot(can_assign, false)?,
-                TokenKind::LeftSquareBrace => self.member_access(can_assign, false)?,
+                TokenKind::Dot => self.dot(precedence)?,
+                TokenKind::LeftSquareBrace => self.member_access(precedence)?,
                 _ => self.binary(token)?,
             }
         }
 
-        if can_assign {
+        if precedence.can_assign() {
             let token = self.peek_token();
             if token.kind == TokenKind::Equal {
                 return Err(CompileError {
@@ -703,7 +705,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
             }
         }
 
-        if is_delete {
+        if precedence.is_delete() {
             let token = self.peek_token();
             if token.kind.precedence() < Precedence::Call {
                 return Err(CompileError {
