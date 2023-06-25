@@ -16,12 +16,17 @@ enum Precedence {
     Factor,
     Unary,
     Call,
+    Construct,
     Primary,
 }
 
 impl Precedence {
     fn can_assign(&self) -> bool {
         *self <= Self::Assignment
+    }
+
+    fn is_construct(&self) -> bool {
+        *self == Self::Construct
     }
 
     fn is_delete(&self) -> bool {
@@ -32,7 +37,8 @@ impl Precedence {
 impl TokenKind {
     fn precedence(&self) -> Precedence {
         match self {
-            Self::LeftParen | Self::Dot | Self::LeftSquareBrace => Precedence::Call,
+            Self::Dot | Self::LeftSquareBrace => Precedence::Construct,
+            Self::LeftParen => Precedence::Call,
             Self::Bang | Self::Delete | Self::Tilda | Self::Throw | Self::Typeof => {
                 Precedence::Unary
             }
@@ -365,8 +371,14 @@ impl<'a, 'b> Compiler<'a, 'b> {
 
             let count = self.comma_separated_rev(|c| c.expression(), TokenKind::RightParen)?;
             self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
+
             self.push(swf::avm1::types::Value::Str(name.into()));
-            self.write_action(swf::avm1::types::Action::CallFunction);
+
+            if precedence.is_construct() {
+                self.write_action(swf::avm1::types::Action::NewObject);
+            } else {
+                self.write_action(swf::avm1::types::Action::CallFunction);
+            }
         } else if precedence.is_delete() && self.peek_token().kind.precedence() < Precedence::Call {
             if register.is_some() {
                 // TODO: Tell exact location.
@@ -410,8 +422,14 @@ impl<'a, 'b> Compiler<'a, 'b> {
             let count = self.comma_separated_rev(|c| c.expression(), TokenKind::RightParen)?;
             self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
             self.write_action(swf::avm1::types::Action::StackSwap);
+
             self.push(swf::avm1::types::Value::Str(name.source.into()));
-            self.write_action(swf::avm1::types::Action::CallMethod);
+
+            if precedence.is_construct() {
+                self.write_action(swf::avm1::types::Action::NewMethod);
+            } else {
+                self.write_action(swf::avm1::types::Action::CallMethod);
+            }
         } else if precedence.is_delete() && self.peek_token().kind.precedence() < Precedence::Call {
             // TODO: Error when deleting a property?
             self.push(swf::avm1::types::Value::Str(name.source.into()));
@@ -448,9 +466,15 @@ impl<'a, 'b> Compiler<'a, 'b> {
         if self.consume(TokenKind::LeftParen)? {
             let count = self.comma_separated_rev(|c| c.expression(), TokenKind::RightParen)?;
             self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
+
             self.write_action(swf::avm1::types::Action::StackSwap);
             self.action_data.extend(name);
-            self.write_action(swf::avm1::types::Action::CallMethod);
+
+            if precedence.is_construct() {
+                self.write_action(swf::avm1::types::Action::NewMethod);
+            } else {
+                self.write_action(swf::avm1::types::Action::CallMethod);
+            }
         } else if precedence.is_delete() && self.peek_token().kind.precedence() < Precedence::Call {
             self.action_data.extend(name);
             self.write_action(swf::avm1::types::Action::Delete);
@@ -472,13 +496,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
     }
 
     fn construct(&mut self) -> Result<(), CompileError> {
-        let constructor = self.expect(TokenKind::Identifier, "Expected constructor name")?;
-        self.expect(TokenKind::LeftParen, "Expected '(' after constructor name")?;
-        let count = self.comma_separated_rev(|c| c.expression(), TokenKind::RightParen)?;
-        self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
-        self.push(swf::avm1::types::Value::Str(constructor.source.into()));
-        self.write_action(swf::avm1::types::Action::NewObject);
-        Ok(())
+        self.expression_with_precedence(Precedence::Construct)
     }
 
     fn delete(&mut self) -> Result<(), CompileError> {
@@ -559,7 +577,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
             Precedence::BitwiseShift => Precedence::Term,
             Precedence::Term => Precedence::Factor,
             Precedence::Factor => Precedence::Unary,
-            Precedence::Unary | Precedence::Call => {
+            Precedence::Unary | Precedence::Call | Precedence::Construct => {
                 return Err(CompileError {
                     message: "Expected binary operator".to_string(),
                     line: token.line,
@@ -693,6 +711,20 @@ impl<'a, 'b> Compiler<'a, 'b> {
             if token.kind == TokenKind::Equal {
                 return Err(CompileError {
                     message: "Invalid assignment target".to_string(),
+                    line: token.line,
+                    column: token.column,
+                });
+            }
+        }
+
+        if precedence.is_construct() {
+            let token = self.peek_token();
+            println!("{:?}", token);
+            if token.kind.precedence() < Precedence::Construct
+                && token.kind.precedence() != Precedence::None
+            {
+                return Err(CompileError {
+                    message: "Invalid construct target".to_string(),
                     line: token.line,
                     column: token.column,
                 });
