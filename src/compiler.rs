@@ -661,13 +661,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
                 "stopDrag" => self.builtin(swf::avm1::types::Action::EndDrag, 0)?,
                 "targetPath" => self.builtin(swf::avm1::types::Action::TargetPath, 1)?,
                 "toggleHighQuality" => self.builtin(swf::avm1::types::Action::ToggleQuality, 0)?,
-                variable_name => {
-                    self.variable_access(variable_name, precedence)?;
-                    if precedence.is_delete() {
-                        // Skip invalid delete target check.
-                        return Ok(());
-                    }
-                }
+                variable_name => self.variable_access(variable_name, precedence)?,
             },
             TokenKind::Eof => {
                 return Err(CompileError {
@@ -707,7 +701,9 @@ impl<'a, 'b> Compiler<'a, 'b> {
 
         if precedence.is_delete() {
             let token = self.peek_token();
-            if token.kind.precedence() < Precedence::Call {
+            if token.kind.precedence() < Precedence::Call
+                && token.kind.precedence() != Precedence::None
+            {
                 return Err(CompileError {
                     message: "Invalid delete target".to_string(),
                     line: token.line,
