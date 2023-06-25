@@ -17,6 +17,9 @@ enum Precedence {
     Unary,
     Call,
     Construct,
+    Delete,
+    Path,
+    #[allow(dead_code)]
     Primary,
 }
 
@@ -30,14 +33,14 @@ impl Precedence {
     }
 
     fn is_delete(&self) -> bool {
-        *self == Self::Primary
+        *self == Self::Delete
     }
 }
 
 impl TokenKind {
     fn precedence(&self) -> Precedence {
         match self {
-            Self::Dot | Self::LeftSquareBrace => Precedence::Construct,
+            Self::Dot | Self::LeftSquareBrace => Precedence::Path,
             Self::LeftParen => Precedence::Call,
             Self::Bang | Self::Delete | Self::Tilda | Self::Throw | Self::Typeof => {
                 Precedence::Unary
@@ -500,18 +503,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
     }
 
     fn delete(&mut self) -> Result<(), CompileError> {
-        self.expression_with_precedence(Precedence::Primary)?;
-
-        while self.peek_token().kind.precedence() >= Precedence::Call {
-            let token = self.read_token()?;
-            match token.kind {
-                TokenKind::Dot => self.dot(Precedence::Primary)?,
-                TokenKind::LeftSquareBrace => self.member_access(Precedence::Primary)?,
-                _ => unreachable!(),
-            }
-        }
-
-        Ok(())
+        self.expression_with_precedence(Precedence::Delete)
     }
 
     fn unary(&mut self, token_kind: TokenKind) -> Result<(), CompileError> {
@@ -567,7 +559,11 @@ impl<'a, 'b> Compiler<'a, 'b> {
 
     fn binary(&mut self, token: Token) -> Result<(), CompileError> {
         let next_precedence = match token.kind.precedence() {
-            Precedence::None | Precedence::Primary => unreachable!(),
+            Precedence::None
+            | Precedence::Construct
+            | Precedence::Delete
+            | Precedence::Path
+            | Precedence::Primary => unreachable!(),
             Precedence::Assignment => Precedence::BitwiseOr,
             Precedence::BitwiseOr => Precedence::BitwiseXor,
             Precedence::BitwiseXor => Precedence::BitwiseAnd,
@@ -577,7 +573,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
             Precedence::BitwiseShift => Precedence::Term,
             Precedence::Term => Precedence::Factor,
             Precedence::Factor => Precedence::Unary,
-            Precedence::Unary | Precedence::Call | Precedence::Construct => {
+            Precedence::Unary | Precedence::Call => {
                 return Err(CompileError {
                     message: "Expected binary operator".to_string(),
                     line: token.line,
