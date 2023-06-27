@@ -692,7 +692,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
             }
             _ => {
                 return Err(CompileError {
-                    message: format!("Unexpected token: \"{}\"", token.source),
+                    message: format!("Unexpected '{}'", token.source),
                     line: token.line,
                     column: token.column,
                 })

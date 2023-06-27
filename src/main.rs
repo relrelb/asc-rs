@@ -30,7 +30,7 @@ fn main() {
     if let Err(error) = compiler::compile(&source, writer) {
         let line = source.lines().nth(error.line - 1).unwrap();
         println!(
-            "{}:{}:{}: {}.\n\t{}\n\t{}^",
+            "{}:{}:{}: {}:\n\t{}\n\t{}^",
             filename,
             error.line,
             error.column,
