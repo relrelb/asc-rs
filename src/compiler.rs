@@ -114,6 +114,10 @@ fn register_index(name: &str) -> Option<u8> {
     name.strip_prefix("register").and_then(|r| r.parse().ok())
 }
 
+struct Label {
+    position: usize,
+}
+
 struct CompilerState<'a> {
     scanner: Scanner<'a>,
     current: Token<'a>,
@@ -855,6 +859,52 @@ impl<'a, 'b> Compiler<'a, 'b> {
         Ok(())
     }
 
+    fn label(&self) -> Label {
+        Label {
+            position: self.action_data.len(),
+        }
+    }
+
+    fn jump(&mut self, label: &Label) {
+        const JUMP_SIZE: usize = 5;
+
+        let offset = self.action_data.len() - label.position;
+        self.write_action(swf::avm1::types::Action::Jump(swf::avm1::types::Jump {
+            offset: -i16::try_from(offset + JUMP_SIZE).unwrap(),
+        }));
+    }
+
+    fn for_statement(&mut self) -> Result<(), CompileError> {
+        self.expect(TokenKind::LeftParen, "Expected '(' after for")?;
+        self.expect(TokenKind::Var, "Expected 'var'")?;
+        let variable = self.expect(TokenKind::Identifier, "Expected variable name")?;
+        self.expect(TokenKind::In, "Expected 'in'")?;
+        self.expression()?;
+        self.write_action(swf::avm1::types::Action::Enumerate2);
+        self.expect(TokenKind::RightParen, "Expected ')'")?;
+
+        let body = self.nested(|c| c.statement())?;
+        const JUMP_SIZE: usize = 5;
+        let offset = body.len() + JUMP_SIZE * 2;
+
+        let start = self.label();
+        self.write_action(swf::avm1::types::Action::PushDuplicate);
+        self.push(swf::avm1::types::Value::Null);
+        self.write_action(swf::avm1::types::Action::Equals2);
+        self.write_action(swf::avm1::types::Action::If(swf::avm1::types::If {
+            offset: offset.try_into().unwrap(),
+        }));
+
+        self.push(swf::avm1::types::Value::Str(variable.source.into()));
+        self.write_action(swf::avm1::types::Action::StackSwap);
+        self.write_action(swf::avm1::types::Action::DefineLocal);
+
+        self.action_data.extend(body);
+        self.jump(&start);
+
+        Ok(())
+    }
+
     fn while_statement(&mut self) -> Result<(), CompileError> {
         self.expect(TokenKind::LeftParen, "Expected '(' after while")?;
         let condition = self.nested(|c| c.expression())?;
@@ -864,15 +914,15 @@ impl<'a, 'b> Compiler<'a, 'b> {
         const JUMP_SIZE: usize = 5;
         let offset = body.len() + JUMP_SIZE * 2;
 
-        self.write_action(swf::avm1::types::Action::Not);
+        let start = self.label();
         self.action_data.extend(&condition);
+        self.write_action(swf::avm1::types::Action::Not);
         self.write_action(swf::avm1::types::Action::If(swf::avm1::types::If {
             offset: offset.try_into().unwrap(),
         }));
+
         self.action_data.extend(body);
-        self.write_action(swf::avm1::types::Action::Jump(swf::avm1::types::Jump {
-            offset: -i16::try_from(condition.len() + offset).unwrap(),
-        }));
+        self.jump(&start);
 
         Ok(())
     }
@@ -923,6 +973,8 @@ impl<'a, 'b> Compiler<'a, 'b> {
             self.block_statement()
         } else if self.consume(TokenKind::If)? {
             self.if_statement()
+        } else if self.consume(TokenKind::For)? {
+            self.for_statement()
         } else if self.consume(TokenKind::While)? {
             self.while_statement()
         } else if self.consume(TokenKind::Try)? {
