@@ -59,7 +59,9 @@ pub enum TokenKind {
     Undefined,
 
     // Keywords.
+    Break,
     Catch,
+    Continue,
     Delete,
     Else,
     Finally,
@@ -355,7 +357,9 @@ impl<'a> Scanner<'a> {
             Some('0'..='9') => self.read_number()?,
             Some(quote @ ('"' | '\'')) => self.read_string(quote)?,
             Some('A'..='Z' | 'a'..='z' | '_' | '$') => match self.read_identifier() {
+                "break" => TokenKind::Break,
                 "catch" => TokenKind::Catch,
+                "continue" => TokenKind::Continue,
                 "delete" => TokenKind::Delete,
                 "else" => TokenKind::Else,
                 "false" => TokenKind::False,

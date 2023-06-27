@@ -134,6 +134,7 @@ impl<'a> CompilerState<'a> {
 
 struct Compiler<'a, 'b> {
     state: &'b mut CompilerState<'a>,
+    in_loop: bool,
     action_data: Vec<u8>,
 }
 
@@ -141,6 +142,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
     fn new(state: &'b mut CompilerState<'a>) -> Self {
         Self {
             state,
+            in_loop: false,
             action_data: Vec::new(),
         }
     }
@@ -883,7 +885,11 @@ impl<'a, 'b> Compiler<'a, 'b> {
         self.write_action(swf::avm1::types::Action::Enumerate2);
         self.expect(TokenKind::RightParen, "Expected ')'")?;
 
-        let body = self.nested(|c| c.statement())?;
+        let body = self.nested(|c| {
+            c.in_loop = true;
+            c.statement()
+        })?;
+
         const JUMP_SIZE: usize = 5;
         let offset = body.len() + JUMP_SIZE * 2;
 
@@ -910,7 +916,11 @@ impl<'a, 'b> Compiler<'a, 'b> {
         let condition = self.nested(|c| c.expression())?;
         self.expect(TokenKind::RightParen, "Expected ')' after condition")?;
 
-        let body = self.nested(|c| c.statement())?;
+        let body = self.nested(|c| {
+            c.in_loop = true;
+            c.statement()
+        })?;
+
         const JUMP_SIZE: usize = 5;
         let offset = body.len() + JUMP_SIZE * 2;
 
@@ -924,6 +934,22 @@ impl<'a, 'b> Compiler<'a, 'b> {
         self.action_data.extend(body);
         self.jump(&start);
 
+        Ok(())
+    }
+
+    fn continue_statement(&mut self) -> Result<(), CompileError> {
+        if !self.in_loop {
+            // TODO: Tell exact location.
+            let token = self.peek_token();
+            return Err(CompileError {
+                message: format!("Unexpected 'continue' outside of loop"),
+                line: token.line,
+                column: token.column,
+            });
+        }
+
+        self.jump(&Label { position: 0 });
+        self.expect(TokenKind::Semicolon, "Expected ';' after statement")?;
         Ok(())
     }
 
@@ -977,6 +1003,8 @@ impl<'a, 'b> Compiler<'a, 'b> {
             self.for_statement()
         } else if self.consume(TokenKind::While)? {
             self.while_statement()
+        } else if self.consume(TokenKind::Continue)? {
+            self.continue_statement()
         } else if self.consume(TokenKind::Try)? {
             self.try_statement()
         } else if self.consume(TokenKind::Trace)? {
