@@ -647,8 +647,44 @@ impl<'a, 'b> Compiler<'a, 'b> {
             | TokenKind::Typeof => self.unary(token.kind)?,
             TokenKind::DoublePlus | TokenKind::DoubleMinus => self.prefix(token.kind)?,
             TokenKind::Number => {
-                let integer = token.source.parse().unwrap();
-                self.push(swf::avm1::types::Value::Int(integer));
+                let (source_without_radix, radix) = if let Some(source) = token
+                    .source
+                    .strip_prefix("0b")
+                    .or(token.source.strip_prefix("0B"))
+                {
+                    (source, 2)
+                } else if let Some(source) = token
+                    .source
+                    .strip_prefix("0o")
+                    .or(token.source.strip_prefix("0O"))
+                {
+                    (source, 8)
+                } else if let Some(source) = token
+                    .source
+                    .strip_prefix("0x")
+                    .or(token.source.strip_prefix("0X"))
+                {
+                    (source, 16)
+                } else {
+                    (token.source, 10)
+                };
+
+                if let Ok(integer) = i32::from_str_radix(source_without_radix, radix) {
+                    self.push(swf::avm1::types::Value::Int(integer));
+                } else if radix != 10 {
+                    let integer =
+                        i64::from_str_radix(source_without_radix, radix).map_err(|_| {
+                            CompileError {
+                                message: "Number too large".to_string(),
+                                line: token.line,
+                                column: token.column,
+                            }
+                        })?;
+                    self.push(swf::avm1::types::Value::Double(integer as f64));
+                } else {
+                    let double = token.source.parse().unwrap();
+                    self.push(swf::avm1::types::Value::Double(double));
+                }
             }
             TokenKind::String => {
                 let string = &token.source[1..token.source.len() - 1];
@@ -721,7 +757,6 @@ impl<'a, 'b> Compiler<'a, 'b> {
 
         if precedence.is_construct() {
             let token = self.peek_token();
-            println!("{:?}", token);
             if token.kind.precedence() < Precedence::Construct
                 && token.kind.precedence() != Precedence::None
             {

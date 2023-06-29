@@ -142,11 +142,68 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn read_number(&mut self) -> Result<TokenKind, CompileError> {
-        // TODO: Support decimal dot and exponent notation.
-        while let Some((_, '0'..='9')) = self.chars.peek() {
+    fn read_number(&mut self, first_digit: char) -> Result<TokenKind, CompileError> {
+        if first_digit == '0' {
+            match self.chars.peek() {
+                Some((_, 'b' | 'B')) => {
+                    // Binary number.
+                    self.read_char();
+                    while let Some((_, '0'..='1')) = self.chars.peek() {
+                        self.read_char();
+                    }
+                    return Ok(TokenKind::Number);
+                }
+                Some((_, 'o' | 'O')) => {
+                    // Octal number.
+                    self.read_char();
+                    while let Some((_, '0'..='7')) = self.chars.peek() {
+                        self.read_char();
+                    }
+                    return Ok(TokenKind::Number);
+                }
+                Some((_, 'x' | 'X')) => {
+                    // Hexadecimal number.
+                    self.read_char();
+                    while matches!(self.chars.peek(), Some((_, c)) if c.is_ascii_hexdigit()) {
+                        self.read_char();
+                    }
+                    return Ok(TokenKind::Number);
+                }
+                _ => {}
+            }
+        }
+
+        // Decimal number.
+        while matches!(self.chars.peek(), Some((_, c)) if c.is_ascii_digit()) {
             self.read_char();
         }
+
+        // Decimal dot.
+        if let Some((_, '.')) = self.chars.peek() {
+            self.read_char();
+            while matches!(self.chars.peek(), Some((_, c)) if c.is_ascii_digit()) {
+                self.read_char();
+            }
+        }
+
+        // Exponent.
+        if let Some((_, 'e' | 'E')) = self.chars.peek() {
+            self.read_char();
+            if let Some((_, '+' | '-')) = self.chars.peek() {
+                self.read_char();
+            }
+            if !matches!(self.chars.peek(), Some((_, c)) if c.is_ascii_digit()) {
+                return Err(CompileError {
+                    message: "Expected exponent".to_string(),
+                    line: self.line,
+                    column: self.column,
+                });
+            }
+            while matches!(self.chars.peek(), Some((_, c)) if c.is_ascii_digit()) {
+                self.read_char();
+            }
+        }
+
         Ok(TokenKind::Number)
     }
 
@@ -354,7 +411,7 @@ impl<'a> Scanner<'a> {
                 _ => TokenKind::Star,
             },
             Some('~') => TokenKind::Tilda,
-            Some('0'..='9') => self.read_number()?,
+            Some(digit) if digit.is_ascii_digit() => self.read_number(digit)?,
             Some(quote @ ('"' | '\'')) => self.read_string(quote)?,
             Some('A'..='Z' | 'a'..='z' | '_' | '$') => match self.read_identifier() {
                 "break" => TokenKind::Break,
