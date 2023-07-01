@@ -428,7 +428,14 @@ impl<'a, 'b> Compiler<'a, 'b> {
 
         if self.consume(TokenKind::LeftParen)? {
             // TODO: Error when calling a property?
-            let count = self.comma_separated_rev(|c| c.expression(), TokenKind::RightParen)?;
+            let count = self.comma_separated_rev(
+                |c| {
+                    c.expression()?;
+                    c.write_action(swf::avm1::types::Action::StackSwap);
+                    Ok(())
+                },
+                TokenKind::RightParen,
+            )?;
             self.push(swf::avm1::types::Value::Int(count.try_into().unwrap()));
             self.write_action(swf::avm1::types::Action::StackSwap);
 
